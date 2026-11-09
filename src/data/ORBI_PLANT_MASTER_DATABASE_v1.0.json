@@ -1,0 +1,13 @@
+{
+  "metadata": {
+    "name": "ORBI Plant Master Database",
+    "version": "1.0.0",
+    "portfolio": "TRITEC-INTERVENTO O&M",
+    "cutoff_date": "2026-08-02",
+    "plant_count": 59,
+    "enriched_count": 20,
+    "base_initial_count": 39,
+    "credentials_included": false,
+    "integration_target": "ORBI Commander Center / Matriz de Plantas"
+  }
+}

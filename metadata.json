@@ -1,0 +1,8 @@
+{
+  "name": "Remix ORBI O\u0026M Command Center IA",
+  "description": "Centro de control operacional para la gestión de Operación y Mantenimiento (O\u0026M) fotovoltaico del ecosistema ORBI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
