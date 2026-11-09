@@ -1,0 +1,37 @@
+name: CI — Verificación y Build ORBI O&M
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify-and-build:
+    name: Typecheck, Validación de Datos, Tests y Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificación estática TypeScript (lint)
+        run: npm run lint
+
+      - name: Validación de integridad de plantas y scopes
+        run: npm run validate:data
+
+      - name: Ejecutar suite de pruebas automatizadas
+        run: npm test
+
+      - name: Compilar frontend y servidor de producción
+        run: npm run build

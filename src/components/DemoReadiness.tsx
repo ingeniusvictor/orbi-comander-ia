@@ -174,8 +174,12 @@ export default function DemoReadiness({
 
   // Find demo OTs state
   const getOtStatus = (codigo: string) => {
-    const ot = ots.find(o => o.codigo === codigo);
-    return ot ? ot.estado : 'Nueva (No inicializada)';
+    const normalized = codigo.replace(/^OT-/i, '');
+    const ot = ots.find(o => {
+      const candidate = (o.codigo || '').replace(/^OT-/i, '');
+      return o.codigo === codigo || candidate === normalized;
+    });
+    return ot ? ot.estado : 'Pendiente de inicialización';
   };
 
   // Generate dynamic snapshot payload
