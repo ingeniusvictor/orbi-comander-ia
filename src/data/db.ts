@@ -10,6 +10,28 @@ import {
   loadOrganigramaFromStorage,
   saveOrganigramaToStorage
 } from './organigramaData';
+import { ROLES_CONFIG } from './rolesConfig';
+import {
+  STORAGE_KEYS,
+  SCHEMA_VERSION_VALUE,
+  readStorageCollection,
+  writeStorageCollection,
+  exportDatabaseSnapshot,
+  importDatabaseSnapshot,
+  resetAllDatabases,
+  OrbiDatabaseSnapshot
+} from './storage';
+
+export {
+  ROLES_CONFIG,
+  STORAGE_KEYS,
+  readStorageCollection,
+  writeStorageCollection,
+  exportDatabaseSnapshot,
+  importDatabaseSnapshot,
+  resetAllDatabases
+};
+export type { OrbiDatabaseSnapshot };
 
 import {
   RoleConfig,
@@ -32,106 +54,6 @@ import {
   OMInventoryItem,
   OMInventoryMovement
 } from '../types';
-
-// Configuración de Roles y Permisos del ecosistema ORBI O&M Command Center IA
-export const ROLES_CONFIG: Record<string, RoleConfig> = {
-  SUPER_ADMIN_ORBI: {
-    id: 'SUPER_ADMIN_ORBI',
-    title: 'Super Admin ORBI',
-    scope: 'Acceso total y configuración global del sistema',
-    badgeColor: 'bg-red-500/20 text-red-400 border border-red-500/30',
-    suggestedView: 'Home',
-    permissions: ['*'],
-  },
-  GERENCIA: {
-    id: 'GERENCIA',
-    title: 'Gerencia General / Operaciones',
-    scope: 'Visión estratégica, KPIs consolidados y reportes ejecutivos para directorio',
-    badgeColor: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30',
-    suggestedView: 'Home',
-    permissions: ['view_all_kpis', 'export_reports', 'view_organigrama', 'view_bi'],
-  },
-  JEFE_OM: {
-    id: 'JEFE_OM',
-    title: 'Jefe O&M',
-    scope: 'Controla el flujo completo de O&M, prioriza actividades críticas, destraba recursos, aprueba cierres y responde a gerencia',
-    badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
-    suggestedView: 'Home',
-    permissions: ['manage_ot', 'create_ot', 'reopen_ot', 'approve_closures', 'escalate_ot', 'view_all_kpis', 'edit_organigrama'],
-  },
-  COORDINADOR_OM: {
-    id: 'COORDINADOR_OM',
-    title: 'Coordinador O&M',
-    scope: 'Crea OTs, asigna coordinadores/supervisores, programa actividades, coordina recursos, controla fechas y valida avance',
-    badgeColor: 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30',
-    suggestedView: 'OTs',
-    permissions: ['create_ot', 'edit_ot', 'assign_supervisor', 'schedule_ot', 'validate_closure', 'view_planification'],
-  },
-  SUPERVISOR_TERRENO: {
-    id: 'SUPERVISOR_TERRENO',
-    title: 'Supervisor Terreno',
-    scope: 'Asigna ejecución, confirma disponibilidad, reporta avances, valida evidencias en planta, reporta bloqueos y solicita repuestos',
-    badgeColor: 'bg-orange-500/20 text-orange-400 border border-orange-500/30',
-    suggestedView: 'OTs',
-    permissions: ['assign_technician', 'update_ot_progress', 'add_evidence', 'request_spares', 'report_blockade', 'propose_closure'],
-  },
-  INGENIERO_OM: {
-    id: 'INGENIERO_OM',
-    title: 'Ingeniero de O&M',
-    scope: 'Análisis técnico, soporte en terreno, diagnóstico de fallas, medición de curvas I-V y checklist técnico',
-    badgeColor: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-    suggestedView: 'Terreno',
-    permissions: ['view_assigned_ot', 'update_ot_status', 'add_evidence', 'create_finding', 'checklist'],
-  },
-  TECNICO_OM: {
-    id: 'TECNICO_OM',
-    title: 'Técnico de Terreno',
-    scope: 'Ejecución de actividades, llenado de checklist, reporte de horas hombre y observaciones',
-    badgeColor: 'bg-teal-500/20 text-teal-400 border border-teal-500/30',
-    suggestedView: 'Terreno',
-    permissions: ['view_assigned_ot', 'update_ot_status', 'add_evidence', 'checklist'],
-  },
-  HSE: {
-    id: 'HSE',
-    title: 'Especialista HSE (Bridge)',
-    scope: 'Gestión de seguridad, revisión de incidentes, AST, permisos de trabajo y bloqueo de actividades',
-    badgeColor: 'bg-rose-500/20 text-rose-400 border border-rose-500/30',
-    suggestedView: 'HSE',
-    permissions: ['manage_hse', 'approve_ast', 'view_hse_findings', 'stop_work'],
-  },
-  CALIDAD: {
-    id: 'CALIDAD',
-    title: 'Inspector de Calidad (Bridge)',
-    scope: 'Control de calidad, hallazgos de calidad, pruebas de comisionamiento y aceptación de cierres',
-    badgeColor: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
-    suggestedView: 'HSE',
-    permissions: ['manage_quality', 'approve_ot_quality', 'view_quality_findings'],
-  },
-  PLANIFICACION: {
-    id: 'PLANIFICACION',
-    title: 'Planificador de O&M',
-    scope: 'Creación de planes preventivos, asignación de calendarios en Workspace y control de desviaciones',
-    badgeColor: 'bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30',
-    suggestedView: 'Planificación',
-    permissions: ['manage_planification', 'create_plan', 'view_hh_reports'],
-  },
-  COMISIONAMIENTO: {
-    id: 'COMISIONAMIENTO',
-    title: 'Ingeniero Comisionamiento',
-    scope: 'Pruebas de puesta en marcha, energizaciones y traspasos técnicos a O&M',
-    badgeColor: 'bg-sky-500/20 text-sky-400 border border-sky-500/30',
-    suggestedView: 'OTs',
-    permissions: ['view_comisionamiento', 'create_comisionamiento_ot'],
-  },
-  LECTURA_CLIENTE: {
-    id: 'LECTURA_CLIENTE',
-    title: 'Cliente (Solo Lectura)',
-    scope: 'Acceso a reportes de disponibilidad, avance de OT y evidencias de su planta',
-    badgeColor: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
-    suggestedView: 'Home',
-    permissions: ['read_only_plants', 'view_client_reports'],
-  },
-};
 
 // 1. Organigrama Base (DB_ORGANIGRAMA) - Estructura Jerárquica O&M
 export const INITIAL_ORGANIGRAMA: OrganigramaNode[] = INITIAL_ORGANIGRAMA_76 as OrganigramaNode[];
@@ -1129,55 +1051,6 @@ export function getChecklistByOTType(tipo: string, activo: string = ''): string[
     'Prueba funcional y validación de comunicaciones.'
   ];
 }
-
-export const STORAGE_KEYS = {
-  SCHEMA_VERSION: 'orbi_om_schema_version_v2',
-  ORGANIGRAMA: 'orbi_om_db_organigrama',
-  PLANTAS: 'orbi_om_db_plantas',
-  OTS: 'orbi_om_db_ots', // Will load / save the extended OT structure
-  HSE_CALIDAD: 'orbi_om_db_hse_calidad',
-  PLANIFICACION: 'orbi_om_db_planificacion',
-  VEHICULOS: 'orbi_om_db_vehiculos',
-  RECURSOS_PERSONAS: 'orbi_om_db_recursos_personas',
-  ACTIVE_ROLE: 'orbi_om_active_role',
-  ACTIVE_USER_NAME: 'orbi_om_active_user_name',
-  DB_WORKSPACE: 'orbi_om_db_workspace',
-  DB_BI_KPI: 'orbi_om_db_bi_kpi',
-  DB_ACTIVITY_LOG: 'orbi_om_db_activity_log',
-  DB_RESOURCE_LOAD: 'orbi_om_db_resource_load',
-  DB_GERENCIA_REPORTS: 'orbi_om_db_gerencia_reports',
-  
-  // Nuevas claves del parche v0.1.1C
-  DB_FLOTA: 'orbi_om_db_flota_v1',
-  DB_LOGISTICA: 'orbi_om_db_logistica_v1',
-  DB_REPUESTOS: 'orbi_om_db_repuestos_v1',
-  DB_HERRAMIENTAS: 'orbi_om_db_herramientas_v1',
-  DB_RESOURCE_CENTER: 'orbi_om_db_resource_center_v1',
-  DB_AUDIT_LOG: 'orbi_om_db_audit_log_v1',
-  DB_ESCALAMIENTOS: 'orbi_om_db_escalamientos_v1',
-  DB_BLOCKERS: 'orbi_om_db_blockers_v1',
-
-  // Nuevas claves del parche v0.1.2B
-  DB_EVIDENCE_PACK: 'orbi_om_db_evidence_pack_v1',
-  DB_FIELD_EXECUTION: 'orbi_om_db_field_execution_v1',
-  DB_CHECKLIST_EXECUTION: 'orbi_om_db_checklist_execution_v1',
-  DB_FIELD_BLOCKERS: 'orbi_om_db_field_blockers_v1',
-  DB_FIELD_CLOSURE_REQUESTS: 'orbi_om_db_field_closure_requests_v1',
-
-  // Nuevas claves del parche v0.1.2C
-  DB_CLOSURE_WORKFLOW: 'orbi_om_db_closure_workflow_v1',
-  DB_APPROVALS: 'orbi_om_db_approvals_v1',
-  DB_CLOSE_REPORTS: 'orbi_om_db_close_reports_v1',
-  DB_RETURN_TO_FIELD: 'orbi_om_db_return_to_field_v1',
-  DB_CLOSURE_QUALITY: 'orbi_om_db_closure_quality_v1',
-  
-  // Clave del módulo PTW Center
-  DB_PTW: 'orbi_om_db_ptw_v1',
-  DB_INVENTORY: 'orbi_om_db_inventory_v1',
-  DB_INVENTORY_MOVEMENTS: 'orbi_om_db_inventory_movements_v1'
-};
-
-const SCHEMA_VERSION_VALUE = '0.1.2C-closure-approvals-report-pack';
 
 export const INITIAL_PTWS: PTW[] = [
   {
@@ -2486,29 +2359,5 @@ export const loadInventoryMovements = (): OMInventoryMovement[] => {
 export const saveInventoryMovements = (data: OMInventoryMovement[]) => {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.DB_INVENTORY_MOVEMENTS, JSON.stringify(data));
-  }
-};
-
-// Resetear bases de datos a estado original
-export const resetAllDatabases = () => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(STORAGE_KEYS.SCHEMA_VERSION);
-    localStorage.removeItem(STORAGE_KEYS.ORGANIGRAMA);
-    localStorage.removeItem(STORAGE_KEYS.PLANTAS);
-    localStorage.removeItem(STORAGE_KEYS.OTS);
-    localStorage.removeItem(STORAGE_KEYS.HSE_CALIDAD);
-    localStorage.removeItem(STORAGE_KEYS.PLANIFICACION);
-    localStorage.removeItem(STORAGE_KEYS.VEHICULOS);
-    localStorage.removeItem(STORAGE_KEYS.RECURSOS_PERSONAS);
-    localStorage.removeItem(STORAGE_KEYS.ACTIVE_ROLE);
-    localStorage.removeItem(STORAGE_KEYS.ACTIVE_USER_NAME);
-    localStorage.removeItem(STORAGE_KEYS.DB_REPUESTOS);
-    localStorage.removeItem(STORAGE_KEYS.DB_HERRAMIENTAS);
-    localStorage.removeItem(STORAGE_KEYS.DB_AUDIT_LOG);
-    localStorage.removeItem(STORAGE_KEYS.DB_ESCALAMIENTOS);
-    localStorage.removeItem(STORAGE_KEYS.DB_PTW);
-    localStorage.removeItem(STORAGE_KEYS.DB_INVENTORY);
-    localStorage.removeItem(STORAGE_KEYS.DB_INVENTORY_MOVEMENTS);
-    window.location.reload();
   }
 };

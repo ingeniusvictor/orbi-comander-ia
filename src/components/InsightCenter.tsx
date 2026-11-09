@@ -284,6 +284,9 @@ export default function InsightCenter({
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
       const data = await response.json();
       setAiAnswer(data.text || 'Error al compilar el informe ejecutivo.');
     } catch (err: any) {
@@ -326,6 +329,9 @@ export default function InsightCenter({
         })
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
       const data = await response.json();
       setAiAnswer(data.text || 'Error al procesar consulta directiva.');
     } catch (err: any) {
