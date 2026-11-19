@@ -38,7 +38,8 @@ import {
   Package,
   ExternalLink
 } from 'lucide-react';
-import { PlanPreventivo, Planta, OT, OTEstado, OTType, OTPrioridad, OrganigramaNode } from '../types';
+import { PlanPreventivo, Planta, OT, OTEstado, OTType, OTPrioridad, OrganigramaNode, RoleType } from '../types';
+import { transitionOT } from '../domain/otStateMachine';
 import {
   WorkspaceViewSelector,
   WorkspaceWeekView,
@@ -146,61 +147,10 @@ export default function Workspace({
   const supervisoresUnicos = ['Alejandro Rojas', 'Mauricio Valdés', 'Francisco Jara'];
   const tecnicosUnicos = ['Cristián Barraza', 'Eduardo Carvallo', 'Daniel Godoy', 'Yasmín Castro', 'Beatriz Loyola', 'Héctor Mellado'];
 
-  // Helper to save to DB_WORKSPACE key in localStorage
-  const saveToDbWorkspace = (updatedOts: OT[]) => {
-    if (typeof window === 'undefined') return;
-    const activities = updatedOts.map(o => ({
-      codigo: o.codigo,
-      fechaInicio: o.fechaInicio || '',
-      responsable: o.responsable,
-      supervisor: o.supervisor,
-      estado: o.estado,
-      hhEstimadas: o.hhEstimadas,
-      hhReales: o.hhReales,
-      vehiculo: 'Toyota Hilux V01',
-      observaciones: o.observaciones
-    }));
-    localStorage.setItem('DB_WORKSPACE', JSON.stringify(activities));
-  };
-
-  // Bidirectional local storage sync for DB_WORKSPACE
+  // 17A: se eliminó la copia paralela 'DB_WORKSPACE'. Las OTs tienen una sola fuente de verdad
+  // (orbi_om_db_ots vía onUpdateOts). Se limpia la clave antigua para que no vuelva a sobrescribir estados.
   useEffect(() => {
-    if (typeof window === 'undefined' || !onUpdateOts) return;
-    const dbWorkspaceRaw = localStorage.getItem('DB_WORKSPACE');
-    if (!dbWorkspaceRaw) {
-      saveToDbWorkspace(ots);
-    } else {
-      try {
-        const workspaceActivities = JSON.parse(dbWorkspaceRaw);
-        let hasChanges = false;
-        const updatedOts = ots.map(ot => {
-          const match = workspaceActivities.find((wa: any) => wa.codigo === ot.codigo);
-          if (match && (
-            match.fechaInicio !== ot.fechaInicio ||
-            match.estado !== ot.estado ||
-            match.responsable !== ot.responsable ||
-            match.supervisor !== ot.supervisor ||
-            match.observaciones !== ot.observaciones
-          )) {
-            hasChanges = true;
-            return {
-              ...ot,
-              fechaInicio: match.fechaInicio,
-              estado: match.estado,
-              responsable: match.responsable,
-              supervisor: match.supervisor,
-              observaciones: match.observaciones || ot.observaciones
-            };
-          }
-          return ot;
-        });
-        if (hasChanges) {
-          onUpdateOts(updatedOts);
-        }
-      } catch (err) {
-        console.error("Error reading DB_WORKSPACE:", err);
-      }
-    }
+    try { localStorage.removeItem('DB_WORKSPACE'); } catch { /* almacenamiento no disponible */ }
   }, []);
 
   // Rule of synchronization: 
@@ -263,21 +213,28 @@ export default function Workspace({
     return filteredScheduledOts.filter((ot) => getOtDay(ot) === day);
   };
 
+  // 17A: aplica cambios a una OT; si cambia el estado, pasa por la máquina de estados única.
+  const withEstado = (o: OT, to: OTEstado | undefined, patch: Partial<OT>, comentario: string): OT | null => {
+    if (!to || to === o.estado) return { ...o, ...patch };
+    const result = transitionOT(o, to, { usuario: username, rol: userRole as RoleType, comentario, escalaciones: escalas }, patch);
+    if (result.ok === false) {
+      alert(result.error);
+      return null;
+    }
+    return result.ot;
+  };
+
+  const replaceOt = (next: OT) => {
+    if (!onUpdateOts) return;
+    onUpdateOts(ots.map((o) => (o.codigo === next.codigo ? next : o)));
+  };
+
   // Move an OT to a different state (Kanban)
   const handleMoveKanban = (otCodigo: string, targetEstado: OTEstado) => {
-    if (!onUpdateOts) return;
-    const updated = ots.map((o) => {
-      if (o.codigo === otCodigo) {
-        return {
-          ...o,
-          estado: targetEstado,
-          avance: targetEstado === 'Finalizada' ? 100 : o.avance,
-        };
-      }
-      return o;
-    });
-    onUpdateOts(updated);
-    saveToDbWorkspace(updated);
+    const ot = ots.find((o) => o.codigo === otCodigo);
+    if (!ot) return;
+    const next = withEstado(ot, targetEstado, {}, `Movida a ${targetEstado} desde el tablero Workspace`);
+    if (next) replaceOt(next);
   };
 
   // Schedule an OT (sets date, coordinator, supervisor, etc.)
@@ -305,97 +262,56 @@ export default function Workspace({
       motivoReprogramacion?: string;
     }
   ) => {
-    if (!onUpdateOts) return;
-
-    const updated = ots.map((o) => {
-      if (o.codigo === otCodigo) {
-        const isRescheduling = !!o.fechaInicio && o.fechaInicio !== data.fechaInicio;
-        
-        let repCount = o.reprogramacionesCount || 0;
-        let origDate = o.fechaOriginal || o.fechaInicio || data.fechaInicio;
-        let lastMotivo = o.ultimoMotivoReprogramacion;
-        let lastUser = o.ultimoUsuarioReprogramacion;
-
-        if (isRescheduling) {
-          repCount += 1;
-          lastMotivo = data.motivoReprogramacion || 'Reprogramación en Workspace';
-          lastUser = username || 'Supervisor O&M';
-        }
-
-        return {
-          ...o,
-          fechaInicio: data.fechaInicio,
-          responsable: data.responsable,
-          supervisor: data.supervisor,
-          hhEstimadas: data.hhEstimadas,
-          estado: data.estado,
-          observaciones: data.observaciones,
-          reprogramacionesCount: repCount,
-          fechaOriginal: origDate,
-          ultimoMotivoReprogramacion: lastMotivo,
-          ultimoUsuarioReprogramacion: lastUser,
-        };
-      }
-      return o;
-    });
-
-    onUpdateOts(updated);
-    saveToDbWorkspace(updated);
+    const o = ots.find((x) => x.codigo === otCodigo);
+    if (!o) return;
+    const isRescheduling = !!o.fechaInicio && o.fechaInicio !== data.fechaInicio;
+    const patch: Partial<OT> = {
+      fechaInicio: data.fechaInicio,
+      responsable: data.responsable,
+      supervisor: data.supervisor,
+      hhEstimadas: data.hhEstimadas,
+      observaciones: data.observaciones,
+      reprogramacionesCount: (o.reprogramacionesCount || 0) + (isRescheduling ? 1 : 0),
+      fechaOriginal: o.fechaOriginal || o.fechaInicio || data.fechaInicio,
+      ultimoMotivoReprogramacion: isRescheduling ? (data.motivoReprogramacion || 'Reprogramación en Workspace') : o.ultimoMotivoReprogramacion,
+      ultimoUsuarioReprogramacion: isRescheduling ? (username || 'Supervisor O&M') : o.ultimoUsuarioReprogramacion,
+    };
+    const next = withEstado(o, data.estado, patch, data.motivoReprogramacion || 'Programación desde Workspace');
+    if (!next) return;
+    replaceOt(next);
     setIsScheduling(false);
     setSelectedOt(null);
   };
 
   const saveScheduledOt = () => {
-    if (!selectedOt || !onUpdateOts) return;
-
-    const updated = ots.map((o) => {
-      if (o.codigo === selectedOt.codigo) {
-        return {
-          ...o,
-          fechaInicio: schedulerDate,
-          hhEstimadas: Number(schedulerDuration),
-          supervisor: schedulerSupervisor,
-          responsable: schedulerResponsable,
-          estado: schedulerEstado,
-          observaciones: `${schedulerObservaciones}\n[Workspace: Programada para ${schedulerDate} ${schedulerTime} con vehículo ${schedulerVehiculo}]`
-        };
-      }
-      return o;
-    });
-
-    onUpdateOts(updated);
-    saveToDbWorkspace(updated);
+    if (!selectedOt) return;
+    const next = withEstado(selectedOt, schedulerEstado, {
+      fechaInicio: schedulerDate,
+      hhEstimadas: Number(schedulerDuration),
+      supervisor: schedulerSupervisor,
+      responsable: schedulerResponsable,
+      observaciones: `${schedulerObservaciones}
+[Workspace: Programada para ${schedulerDate} ${schedulerTime} con vehículo ${schedulerVehiculo}]`
+    }, `Programada para ${schedulerDate} ${schedulerTime}`);
+    if (!next) return;
+    replaceOt(next);
     setIsScheduling(false);
     setSelectedOt(null);
   };
 
   // Desprogramar (retornar a bandeja pendientes)
   const handleUnschedule = (otCodigo: string) => {
-    if (!onUpdateOts) return;
-    const updated = ots.map((o) => {
-      if (o.codigo === otCodigo) {
-        return {
-          ...o,
-          fechaInicio: '',
-        };
-      }
-      return o;
-    });
-    onUpdateOts(updated);
-    saveToDbWorkspace(updated);
+    const ot = ots.find((o) => o.codigo === otCodigo);
+    if (ot) replaceOt({ ...ot, fechaInicio: '' });
   };
 
   // Quick state update
   const handleQuickUpdate = (otCodigo: string, fields: Partial<OT>) => {
-    if (!onUpdateOts) return;
-    const updated = ots.map((o) => {
-      if (o.codigo === otCodigo) {
-        return { ...o, ...fields };
-      }
-      return o;
-    });
-    onUpdateOts(updated);
-    saveToDbWorkspace(updated);
+    const ot = ots.find((o) => o.codigo === otCodigo);
+    if (!ot) return;
+    const { estado, ...rest } = fields;
+    const next = withEstado(ot, estado, rest, 'Actualización rápida desde Workspace');
+    if (next) replaceOt(next);
   };
 
   // State colors helper supporting 9 specific states
@@ -1773,7 +1689,6 @@ export default function Workspace({
                           const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, fechaInicio: val } : o);
                           if (onUpdateOts) onUpdateOts(updatedOts);
                           setSelectedOt({ ...selectedOt, fechaInicio: val });
-                          saveToDbWorkspace(updatedOts);
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                       />
@@ -1791,7 +1706,6 @@ export default function Workspace({
                           const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, hhEstimadas: val } : o);
                           if (onUpdateOts) onUpdateOts(updatedOts);
                           setSelectedOt({ ...selectedOt, hhEstimadas: val });
-                          saveToDbWorkspace(updatedOts);
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                       />
@@ -1806,7 +1720,6 @@ export default function Workspace({
                           const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, prioridad: val } : o);
                           if (onUpdateOts) onUpdateOts(updatedOts);
                           setSelectedOt({ ...selectedOt, prioridad: val });
-                          saveToDbWorkspace(updatedOts);
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                       >
@@ -1823,10 +1736,10 @@ export default function Workspace({
                         value={selectedOt.estado}
                         onChange={(e) => {
                           const val = e.target.value as OTEstado;
-                          const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, estado: val } : o);
-                          if (onUpdateOts) onUpdateOts(updatedOts);
-                          setSelectedOt({ ...selectedOt, estado: val });
-                          saveToDbWorkspace(updatedOts);
+                          const next = withEstado(selectedOt, val, {}, `Cambio de estado a ${val} desde Workspace`);
+                          if (!next) return;
+                          replaceOt(next);
+                          setSelectedOt(next);
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                       >
@@ -1867,7 +1780,6 @@ export default function Workspace({
                             const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, coordinador: val } : o);
                             if (onUpdateOts) onUpdateOts(updatedOts);
                             setSelectedOt({ ...selectedOt, coordinador: val });
-                            saveToDbWorkspace(updatedOts);
                           }}
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                         >
@@ -1886,7 +1798,6 @@ export default function Workspace({
                             const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, supervisor: val } : o);
                             if (onUpdateOts) onUpdateOts(updatedOts);
                             setSelectedOt({ ...selectedOt, supervisor: val });
-                            saveToDbWorkspace(updatedOts);
                           }}
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                         >
@@ -1905,7 +1816,6 @@ export default function Workspace({
                             const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, responsable: val } : o);
                             if (onUpdateOts) onUpdateOts(updatedOts);
                             setSelectedOt({ ...selectedOt, responsable: val });
-                            saveToDbWorkspace(updatedOts);
                           }}
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                         >
@@ -1966,7 +1876,6 @@ export default function Workspace({
                             const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, vehiculoAsignado: val } : o);
                             if (onUpdateOts) onUpdateOts(updatedOts);
                             setSelectedOt({ ...selectedOt, vehiculoAsignado: val });
-                            saveToDbWorkspace(updatedOts);
                           }}
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                         >
@@ -1983,10 +1892,10 @@ export default function Workspace({
                           value={selectedOt.estado}
                           onChange={(e) => {
                             const val = e.target.value as OTEstado;
-                            const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, estado: val } : o);
-                            if (onUpdateOts) onUpdateOts(updatedOts);
-                            setSelectedOt({ ...selectedOt, estado: val });
-                            saveToDbWorkspace(updatedOts);
+                            const next = withEstado(selectedOt, val, {}, `Cambio de estado a ${val} desde Workspace`);
+                            if (!next) return;
+                            replaceOt(next);
+                            setSelectedOt(next);
                           }}
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                         >
@@ -2092,7 +2001,6 @@ export default function Workspace({
                               const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, progreso: val } : o);
                               if (onUpdateOts) onUpdateOts(updatedOts);
                               setSelectedOt({ ...selectedOt, progreso: val });
-                              saveToDbWorkspace(updatedOts);
                             }}
                             className="w-full accent-indigo-500 h-1.5 rounded-lg cursor-pointer"
                           />
@@ -2112,7 +2020,6 @@ export default function Workspace({
                             const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, hhReales: val } : o);
                             if (onUpdateOts) onUpdateOts(updatedOts);
                             setSelectedOt({ ...selectedOt, hhReales: val });
-                            saveToDbWorkspace(updatedOts);
                           }}
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-indigo-500"
                         />
@@ -2266,7 +2173,6 @@ export default function Workspace({
                           const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, comentariosCierre: val } : o);
                           if (onUpdateOts) onUpdateOts(updatedOts);
                           setSelectedOt({ ...selectedOt, comentariosCierre: val });
-                          saveToDbWorkspace(updatedOts);
                         }}
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500 font-mono resize-none"
                       />
@@ -2288,7 +2194,6 @@ export default function Workspace({
                               const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, firmaCierre: `SEC_VERIFY_${selectedOt.codigo}` } : o);
                               if (onUpdateOts) onUpdateOts(updatedOts);
                               setSelectedOt({ ...selectedOt, firmaCierre: `SEC_VERIFY_${selectedOt.codigo}` });
-                              saveToDbWorkspace(updatedOts);
                             }}
                             className="w-full py-1.5 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-slate-950 text-[10px] rounded font-bold transition-all"
                           >
@@ -2309,10 +2214,11 @@ export default function Workspace({
                           {selectedOt.estado !== 'Finalizada' && selectedOt.estado !== 'Cerrada' && (
                             <button
                               onClick={() => {
-                                const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, estado: 'Finalizada' as OTEstado, progreso: 100 } : o);
+                                const res = transitionOT(selectedOt, 'Finalizada', { usuario: username, rol: userRole as RoleType, comentario: 'Finalizada desde Workspace', escalaciones: escalas });
+                                if (res.ok === false) { alert(res.error); return; }
+                                const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? res.ot : o);
                                 if (onUpdateOts) onUpdateOts(updatedOts);
-                                setSelectedOt({ ...selectedOt, estado: 'Finalizada' as OTEstado, progreso: 100 });
-                                saveToDbWorkspace(updatedOts);
+                                setSelectedOt(res.ot);
                                 if (onAddAuditLog) {
                                   onAddAuditLog(
                                     'OT Finalizada',
@@ -2332,10 +2238,11 @@ export default function Workspace({
                           {selectedOt.estado === 'Finalizada' && (
                             <button
                               onClick={() => {
-                                const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? { ...o, estado: 'Cerrada' as OTEstado } : o);
+                                const res = transitionOT(selectedOt, 'Cerrada', { usuario: username, rol: userRole as RoleType, comentario: 'Cierre administrativo desde Workspace', escalaciones: escalas });
+                                if (res.ok === false) { alert(res.error); return; }
+                                const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? res.ot : o);
                                 if (onUpdateOts) onUpdateOts(updatedOts);
-                                setSelectedOt({ ...selectedOt, estado: 'Cerrada' as OTEstado });
-                                saveToDbWorkspace(updatedOts);
+                                setSelectedOt(res.ot);
                                 if (onAddAuditLog) {
                                   onAddAuditLog(
                                     'OT Cerrada',

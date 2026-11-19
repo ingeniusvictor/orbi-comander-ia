@@ -137,12 +137,14 @@ const getEstadoColor = (estado: string) => {
   switch (estado) {
     case 'Cerrada':
       return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-    case 'Ejecutada':
+    case 'Finalizada':
+    case 'Lista para revisión':
       return 'bg-teal-500/10 text-teal-400 border border-teal-500/20';
-    case 'En Proceso':
+    case 'En ejecución':
     case 'En terreno':
       return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
     case 'Asignada':
+    case 'Programada':
       return 'bg-sky-500/10 text-sky-400 border border-sky-500/20';
     case 'Bloqueada':
       return 'bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse';

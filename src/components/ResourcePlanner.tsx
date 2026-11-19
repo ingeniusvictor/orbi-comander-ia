@@ -118,12 +118,12 @@ export default function ResourcePlanner({
     });
 
     const nextActivity = sortedTodayOts.find(o => 
-      !['Cerrada', 'Finalizada', 'Lista para revisión', 'Ejecutada'].includes(o.estado)
+      !['Cerrada', 'Finalizada', 'Lista para revisión', 'Cancelada'].includes(o.estado)
     );
 
     // Last completed activity (historically complete/executed)
     const lastCompleted = techOts.find(o => 
-      ['Cerrada', 'Finalizada', 'Lista para revisión', 'Ejecutada'].includes(o.estado)
+      ['Cerrada', 'Finalizada', 'Lista para revisión', 'Cancelada'].includes(o.estado)
     );
 
     // Main park based on their active assignments

@@ -5,8 +5,8 @@ This file contains custom instructions, architecture guidelines, and the version
 ---
 
 ## 1. VERSION REGISTRY
-**Current Version:** `ORBI OT Center v0.X / Workspace v11B / Insight Center 12A / MÓDULO 16B.1F — PLANT SCOPE TAXONOMY & ANALYTICS ISOLATION COMPLETE / RELEASE LOCK CANDIDATE`  
-**Status:** **FROZEN / FINAL RELEASE LOCK**  
+**Current Version:** `ORBI OT Center v0.X / … / MÓDULO 16B.1F (base congelada) → MÓDULO 17A — PILOTO FUNCIONAL (EN DESARROLLO)`  
+**Status:** **MÓDULO 17A ABIERTO** — Autorizado por el dueño del producto (2026-11-19) para convertir la demo en un piloto funcional. Los congelamientos 13A–16B quedan levantados **solo** para los cambios del plan 17A descritos en la sección "MÓDULO 17A" más abajo.  
 **Runtime:** React 18+ (Vite) | TypeScript | Tailwind CSS | Recharts & Lucide Icons  
 **State Engine:** Client-side LocalStorage Persistence with fully synchronized mock systems.
 
@@ -459,6 +459,25 @@ Before approving any subsequent build or turn, verify the following 12 test path
 - **Validador Automatizado:** Implementado `src/data/validateData.ts` ejecutable mediante `npm run validate:data` (retorna `EXIT CODE 0 / PASS`).
 
 ---
+
+### MÓDULO 17A — PILOTO FUNCIONAL (EN DESARROLLO)
+- **Status:** `ABIERTO / AUTORIZADO 2026-11-19 / RAMA feat/piloto-17a`
+- **Objetivo:** entregar a gerencia un piloto usable por técnicos y supervisores reales, alineado al flujo de SoftWrench/Maximo que usa hoy la operación.
+- **Referencia de flujo real (SoftWrench, últimos 90 días al 2026-11-19):** ~3.875 OTs; 58% preventivas; estados WAPPR, RTBSCH, DAPPR, INPROG, HOLD, RQARVW, FDCOMP, RSALOR, COMPL/CLOSED, CAN; promedio de 8 a 10 días entre ejecutada (FDCOMP) y cerrada; checklists por plantilla dentro de cada plan preventivo.
+- **Plan por fases:**
+  - **Fase 0 — Integridad (HECHA en esta rama):**
+    - Máquina de estados única `src/domain/otStateMachine.ts` (`transitionOT`), con mapeo de estados ORBI → códigos SoftWrench, reglas de ejecución y cierre, control por rol e historial con fecha y usuario. Todo cambio de estado de OT DEBE pasar por `transitionOT`.
+    - Eliminada la copia paralela `DB_WORKSPACE` (revertía estados) y la preparación automática de casos demo en ReportCenter.
+    - La migración de esquema ya no inventa firmas, aprobaciones ni avances de checklist.
+    - Carga/guardado con respaldo de datos dañados y aviso visible (`orbi:storage-error`).
+    - `ErrorBoundary` contra pantallas en blanco; reset con doble confirmación solo para Super Admin y Jefe O&M; Report Center restringido por rol.
+    - Pruebas `tests/otStateMachine.test.ts` incluidas en `npm test`.
+  - **Fase 1 — Servidor y usuarios:** base de datos en servidor, inicio de sesión real con roles, almacenamiento real de fotos.
+  - **Fase 2 — Entidades CMMS:** activos con jerarquía, plantillas de checklist, planes preventivos que generan OTs, líneas de HH por técnico, códigos de espera y de falla.
+  - **Fase 3 — Terreno:** checklist con foto por pregunta y modo sin conexión con sincronización.
+  - **Fase 4 — Prueba de punta a punta:** preventivo anual de inversores en Cantillana y un correctivo, de creación a cierre.
+- **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.
+- **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)
 

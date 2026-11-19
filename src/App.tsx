@@ -80,6 +80,8 @@ import {
   loadPtws,
   savePtws
 } from './data/db';
+import { STORAGE_ERROR_EVENT } from './data/storage';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Importar Vistas Operacionales
 import HomeEjecutivo from './components/HomeEjecutivo';
@@ -136,6 +138,14 @@ export default function App() {
   // Hora del sistema (Estática de la telemetría O&M o dinámica)
   const [systemTime, setSystemTime] = useState<string>('');
 
+  // 17A: fallas de almacenamiento visibles para el usuario
+  const [storageError, setStorageError] = useState<string | null>(null);
+  useEffect(() => {
+    const onStorageError = (e: Event) => setStorageError((e as CustomEvent<string>).detail);
+    window.addEventListener(STORAGE_ERROR_EVENT, onStorageError);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onStorageError);
+  }, []);
+
   // 1. Inicialización y carga de bases de datos persistentes
   useEffect(() => {
     setOrganigrama(loadOrganigrama());
@@ -177,7 +187,7 @@ export default function App() {
     criticidad: 'Baja' | 'Media' | 'Alta' | 'Crítica' = 'Baja'
   ) => {
     const newEvent: AuditLogEvent = {
-      id: `EV-${Date.now().toString().substring(6)}`,
+      id: `EV-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       fechaHora: new Date().toISOString().replace('T', ' ').substring(0, 16),
       usuarioRol: `${userName} (${ROLES_CONFIG[userRole]?.title || userRole})`,
       accion,
@@ -187,9 +197,12 @@ export default function App() {
       comentario: comentario || '',
       criticidad
     };
-    const updated = [newEvent, ...auditLogs];
-    setAuditLogs(updated);
-    saveAuditLog(updated);
+    // 17A: actualización funcional para no perder eventos registrados en el mismo ciclo
+    setAuditLogs(prev => {
+      const updated = [newEvent, ...prev];
+      saveAuditLog(updated);
+      return updated;
+    });
   };
 
   // 2. Sincronización automática de bases de datos reactivas con localStorage
@@ -400,19 +413,32 @@ export default function App() {
                   );
                 })}
 
+                {['SUPER_ADMIN_ORBI', 'JEFE_OM'].includes(userRole) && (
                 <div className="p-2 border-t border-slate-800 mt-2">
                   <button
-                    onClick={resetAllDatabases}
+                    onClick={() => {
+                      // 17A: doble confirmación; solo Super Admin y Jefe O&M
+                      if (!window.confirm('¿Borrar TODOS los datos locales (OTs, inventario, PTW, auditoría) y volver a los datos de ejemplo?')) return;
+                      if (!window.confirm('Esta acción no se puede deshacer. ¿Confirmas el borrado total?')) return;
+                      resetAllDatabases();
+                    }}
                     className="w-full py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 text-xs font-bold font-mono rounded-lg transition-colors flex items-center justify-center gap-1"
                   >
                     <RefreshCw className="h-3.5 w-3.5" /> Resetear Base Simulada
                   </button>
                 </div>
+                )}
               </div>
             )}
           </div>
         </div>
       </header>
+      {storageError && (
+        <div role="alert" className="bg-rose-600 text-white text-xs font-bold px-4 py-2 flex items-center justify-between gap-3">
+          <span>⚠ {storageError}</span>
+          <button onClick={() => setStorageError(null)} className="underline shrink-0">Cerrar</button>
+        </div>
+      )}
 
       {/* CUERPO PRINCIPAL DEL PANEL */}
       <div className="flex-1 flex relative">
@@ -489,6 +515,7 @@ export default function App() {
 
         {/* AREA DE CONTENIDO PRINCIPAL */}
         <main className="flex-1 p-6 overflow-y-auto max-w-[1600px] mx-auto w-full">
+          <ErrorBoundary modulo={activeView} resetKey={activeView}>
           {activeView === 'Home' && (
             <HomeEjecutivo
               plantas={plantas}
@@ -768,15 +795,24 @@ export default function App() {
                 <p className="text-xs text-slate-400 leading-relaxed font-mono">
                   Si experimenta problemas de consistencia con los datos o desea restablecer los valores simulados a sus valores originales, puede inicializar de nuevo la base de datos de localStorage.
                 </p>
+                {['SUPER_ADMIN_ORBI', 'JEFE_OM'].includes(userRole) ? (
                 <button
-                  onClick={resetAllDatabases}
+                  onClick={() => {
+                    if (!window.confirm('¿Borrar TODOS los datos locales y volver a los datos de ejemplo?')) return;
+                    if (!window.confirm('Esta acción no se puede deshacer. ¿Confirmas el borrado total?')) return;
+                    resetAllDatabases();
+                  }}
                   className="px-4 py-2 bg-rose-500 text-slate-950 text-xs font-bold font-mono rounded-lg hover:bg-rose-400 transition-colors flex items-center gap-1.5"
                 >
                   <RefreshCw className="h-4 w-4" /> Resetear Base Simulada de Datos
                 </button>
+                ) : (
+                  <p className="text-xs text-amber-400 font-mono">Solo Super Admin o Jefe O&amp;M pueden restablecer la base de datos.</p>
+                )}
               </div>
             </div>
           )}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

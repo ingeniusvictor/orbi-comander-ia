@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { transitionOT, nextEstados, softwrenchCodeOf } from '../domain/otStateMachine';
 import {
   FileText,
   Search,
@@ -39,7 +40,7 @@ import {
   Copy,
   FolderSync
 } from 'lucide-react';
-import { OT, Planta, OrganigramaNode, OTEstado, OTType, OTPrioridad, PlanPreventivo, PTW } from '../types';
+import { OT, Planta, OrganigramaNode, OTEstado, OTType, OTPrioridad, PlanPreventivo, PTW, RoleType } from '../types';
 import { getPlantBadgeInfo } from '../data/plantIdentityMap';
 import EvidenceVault from './EvidenceVault';
 import SharePointRouter from './SharePointRouter';
@@ -677,87 +678,18 @@ export default function OTManager({
     if (!editingOt) return;
     setTransitionError(null);
 
-    // Business rules checks for closure
-    if (['Cerrada', 'Finalizada'].includes(targetState)) {
-      if (editingOt.checklistExecution && editingOt.checklistExecution.length > 0) {
-        const incomplete = editingOt.checklistExecution.some(c => !c.completado && !c.noAplica);
-        if (incomplete) {
-          setTransitionError('No se permite finalizar/cerrar la OT: El checklist de ejecución de campo está incompleto.');
-          return;
-        }
-      }
-      
-      const hasEvidence = editingOt.evidencia || 
-                           (editingOt.evidencias && editingOt.evidencias.length > 0) || 
-                           (editingOt.evidencePack && editingOt.evidencePack.length > 0);
-      if (editingOt.requiereEvidencia && !hasEvidence) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Requiere subir evidencia documental o fotográfica primero.');
-        return;
-      }
-      if (!editingOt.hhReales || editingOt.hhReales <= 0) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Las Horas Hombre Reales (HH Ejecutadas) deben ser mayores a 0.');
-        return;
-      }
-      if (editingOt.requiereAST && !editingOt.astFirmado) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Firma AST de terreno pendiente.');
-        return;
-      }
-      if (editingOt.requiereValidacionHSE && editingOt.validacionHSE !== 'Aprobado') {
-        setTransitionError('No se permite finalizar/cerrar la OT: Validación de seguridad HSE pendiente o rechazada.');
-        return;
-      }
-      if (editingOt.requiereValidacionCalidad && editingOt.validacionCalidad !== 'Aprobado') {
-        setTransitionError('No se permite finalizar/cerrar la OT: Validación de Aseguramiento de Calidad pendiente o rechazada.');
-        return;
-      }
-      if (editingOt.bloqueada) {
-        setTransitionError('No se permite finalizar la OT mientras se encuentre en estado de bloqueo operativo activo.');
-        return;
-      }
-      const hasCriticalEscalation = escalaciones?.some(esc => esc.otVinculada === editingOt.codigo && (esc.criticidad === 'Crítica' || esc.criticidad === 'Alta') && esc.estado !== 'Resuelto' && esc.estado !== 'Cerrado');
-      if (hasCriticalEscalation) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Existe un escalamiento de riesgo de criticidad Alta o Crítica abierto y sin resolver para este activo.');
-        return;
-      }
-      if ((editingOt.criticidad === 'Crítica' || editingOt.prioridad === 'Crítica') && !editingOt.approvals?.some(a => ['JefeOM', 'JEFE_OM', 'Jefe O&M', 'Jefe de O&M'].includes(a.rol))) {
-        setTransitionError('No se permite cerrar una OT de criticidad CRÍTICA sin la aprobación digital formal del Jefe de O&M.');
-        return;
-      }
-    }
-
-    // Role restriction for reopening
-    if (targetState === 'Reabierta' && editingOt.estado === 'Cerrada') {
-      if (userRole !== 'JEFE_OM' && userRole !== 'SUPER_ADMIN_ORBI') {
-        setTransitionError('Sólo el Jefe de O&M o el Administrador de ORBI pueden reabrir una OT cerrada.');
-        return;
-      }
-    }
-
-    // Capture lifecycle transition history
-    const historyEntry = {
-      estadoAnterior: editingOt.estado,
-      estadoNuevo: targetState,
-      fecha: new Date().toISOString(),
+    const result = transitionOT(editingOt, targetState, {
       usuario: activeUserName,
+      rol: userRole as RoleType,
+      escalaciones,
       comentario: `Cambio de estado manual a ${targetState}`
-    };
+    });
+    if (result.ok === false) {
+      setTransitionError(result.error);
+      return;
+    }
 
-    const changesEntry = {
-      fecha: new Date().toISOString().split('T')[0],
-      usuario: activeUserName,
-      accion: 'Transición Estado',
-      detalle: `Estado cambió de ${editingOt.estado} a ${targetState}`
-    };
-
-    const updatedOt = {
-      ...editingOt,
-      estado: targetState,
-      lifecycleHistory: [...(editingOt.lifecycleHistory || []), historyEntry],
-      historialCambios: [...(editingOt.historialCambios || []), changesEntry],
-      avance: targetState === 'Cerrada' || targetState === 'Finalizada' ? 100 : editingOt.avance
-    };
-
-    setEditingOt(updatedOt);
+    setEditingOt(result.ot);
     
     // Auto audit log
     if (targetState === 'Reabierta') {
@@ -880,13 +812,6 @@ export default function OTManager({
     if (!editingOt) return;
     
     // Check validation error if closing
-    if (stage === 'JefeOM') {
-      const errorMsg = getClosureValidationError(editingOt);
-      if (errorMsg) {
-        alert(errorMsg);
-        return;
-      }
-    }
 
     const now = new Date().toISOString();
     
@@ -954,15 +879,32 @@ export default function OTManager({
       logComment = `Aprobación final de cierre otorgada por el Jefe de O&M ${activeUserName}.`;
     }
 
+    // Las etapas que cambian el estado pasan por la máquina de estados única (17A)
+    let finalOt: OT = updated;
+    if (updated.estado !== editingOt.estado) {
+      const { estado: targetEstado, lifecycleHistory: _lh, historialCambios: _hc, ...patch } = updated;
+      const result = transitionOT(editingOt, targetEstado, {
+        usuario: activeUserName,
+        rol: userRole as RoleType,
+        escalaciones,
+        comentario: `Validación ${stage} por ${activeUserName}${tempComentarioRevisor ? ': ' + tempComentarioRevisor : ''}`
+      }, patch);
+      if (result.ok === false) {
+        alert(result.error);
+        return;
+      }
+      finalOt = result.ot;
+    }
+
     // Save and persist immediately to parent
-    const idx = ots.findIndex(o => o.codigo === updated.codigo);
+    const idx = ots.findIndex(o => o.codigo === finalOt.codigo);
     if (idx !== -1) {
       const list = [...ots];
-      list[idx] = updated;
+      list[idx] = finalOt;
       onUpdate(list);
     }
 
-    setEditingOt(updated);
+    setEditingOt(finalOt);
     setTempComentarioRevisor('');
     
     // Add Audit Logs
@@ -996,30 +938,20 @@ export default function OTManager({
       return;
     }
 
-    const now = new Date().toISOString();
-    const newLifecycle = {
-      fecha: now,
+    const devResult = transitionOT(editingOt, 'Devuelta a ejecución', {
       usuario: activeUserName,
-      accion: 'Devolución a Terreno',
-      detalle: `Devuelta por ${activeUserName} debido a: ${tempMotivoDevolucion}`,
-      estadoNuevo: 'Devuelta a ejecución' as OTEstado,
-      comentario: tempComentarioDevolucion
-    };
-
-    const updated: OT = {
-      ...editingOt,
-      estado: 'Devuelta a ejecución',
+      rol: userRole as RoleType,
+      comentario: `Devuelta por ${activeUserName}: ${tempMotivoDevolucion}. ${tempComentarioDevolucion}`
+    }, {
       motivoDevolucion: tempMotivoDevolucion,
       comentarioDevolucion: tempComentarioDevolucion,
-      detallesFaltantes: tempDetallesFaltantes,
-      lifecycleHistory: [...(editingOt.lifecycleHistory || []), newLifecycle],
-      historialCambios: [...(editingOt.historialCambios || []), {
-        fecha: now.split('T')[0],
-        usuario: activeUserName,
-        accion: 'Devolución a Terreno',
-        detalle: `OT devuelta a ejecución debido a observaciones de revisión.`
-      }]
-    };
+      detallesFaltantes: tempDetallesFaltantes
+    });
+    if (devResult.ok === false) {
+      alert(devResult.error);
+      return;
+    }
+    const updated: OT = devResult.ot;
 
     // Save and persist immediately to parent
     const idx = ots.findIndex(o => o.codigo === updated.codigo);
@@ -1344,6 +1276,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
           plantas={plantas}
           userRole={userRole}
           activeUserName={activeUserName}
+          escalaciones={escalaciones}
           onUpdateOts={onUpdate}
           onAddAuditLog={onAddAuditLog}
         />
@@ -2993,12 +2926,10 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                   onChange={(e) => handleStateChange(e.target.value as OTEstado)}
                   className="bg-slate-900 border border-slate-800 text-xs text-white rounded p-1.5 font-mono outline-none cursor-pointer focus:border-emerald-500"
                 >
-                  {ESTADOS_PERMITIDOS.map(st => {
-                    if (st === 'Reabierta' && editingOt.estado !== 'Cerrada' && editingOt.estado !== 'Reabierta') {
-                      return null;
-                    }
-                    return <option key={st} value={st}>{st}</option>;
-                  })}
+                  <option value={editingOt.estado}>{editingOt.estado} ({softwrenchCodeOf(editingOt.estado)})</option>
+                  {nextEstados(editingOt.estado).map(st => (
+                    <option key={st} value={st}>{st} ({softwrenchCodeOf(st)})</option>
+                  ))}
                 </select>
               </div>
 

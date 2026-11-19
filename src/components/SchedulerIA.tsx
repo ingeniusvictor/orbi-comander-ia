@@ -25,7 +25,8 @@ import {
   X,
   Plus
 } from 'lucide-react';
-import { OT, Planta, OrganigramaNode } from '../types';
+import { OT, Planta, OrganigramaNode, RoleType } from '../types';
+import { transitionOT } from '../domain/otStateMachine';
 import ResourcePlanner from './ResourcePlanner';
 
 interface SchedulerIAProps {
@@ -155,7 +156,7 @@ export default function SchedulerIA({
     return date < '2026-07-08' && !isClosed;
   }).length;
   const totalInProgress = ots.filter(o => ['En proceso', 'En ejecución', 'En terreno'].includes(o.estado)).length;
-  const totalFieldWorkComplete = ots.filter(o => ['Lista para revisión', 'Ejecutada'].includes(o.estado)).length;
+  const totalFieldWorkComplete = ots.filter(o => ['Lista para revisión', 'Finalizada'].includes(o.estado)).length;
 
   const techsWithHighLoad = technicianList.filter(t => {
     const load = getTechWorkload(t.name);
@@ -169,24 +170,29 @@ export default function SchedulerIA({
   const handleSaveSchedule = () => {
     if (!schedulingOt) return;
 
-    const updatedOts = ots.map(o => {
-      if (o.codigo === schedulingOt.codigo) {
-        return {
-          ...o,
-          fechaProgramada: scheduleDate,
-          fechaInicio: scheduleDate,
-          tecnicoAsignado: scheduleTech || o.tecnicoAsignado || o.responsable,
-          responsable: scheduleTech || o.tecnicoAsignado || o.responsable,
-          horaInicioEstimada: scheduleTime,
-          ventanaTrabajo: 'Diurna (08:00 - 18:00)',
-          hhEstimadas: scheduleDuration,
-          estado: 'Programada' as const
-        };
+    const patch = {
+      fechaProgramada: scheduleDate,
+      fechaInicio: scheduleDate,
+      tecnicoAsignado: scheduleTech || schedulingOt.tecnicoAsignado || schedulingOt.responsable,
+      responsable: scheduleTech || schedulingOt.tecnicoAsignado || schedulingOt.responsable,
+      horaInicioEstimada: scheduleTime,
+      ventanaTrabajo: 'Diurna (08:00 - 18:00)',
+      hhEstimadas: scheduleDuration
+    };
+    let scheduled: OT = { ...schedulingOt, ...patch };
+    if (schedulingOt.estado !== 'Programada') {
+      const result = transitionOT(schedulingOt, 'Programada', {
+        usuario: activeUserName,
+        rol: userRole as RoleType,
+        comentario: `Programada para ${scheduleDate} ${scheduleTime}`
+      }, patch);
+      if (result.ok === false) {
+        alert(result.error);
+        return;
       }
-      return o;
-    });
-
-    onUpdateOts(updatedOts);
+      scheduled = result.ot;
+    }
+    onUpdateOts(ots.map(o => (o.codigo === schedulingOt.codigo ? scheduled : o)));
     setSchedulingOt(null);
   };
 
@@ -198,7 +204,7 @@ export default function SchedulerIA({
     return d >= '2026-07-05' && d <= '2026-07-11' && d !== '2026-07-08';
   });
   const techOtsPendingCorrection = techOts.filter(o => 
-    ['Devuelta a ejecución', 'Reabierta', 'Rechazada'].includes(o.estado)
+    ['Devuelta a ejecución', 'Reabierta'].includes(o.estado)
   );
 
   // Helper colors for statuses
@@ -210,7 +216,6 @@ export default function SchedulerIA({
       case 'En ejecución':
         return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
       case 'Lista para revisión':
-      case 'Ejecutada':
         return 'bg-purple-500/10 text-purple-400 border border-purple-500/20';
       case 'Cerrada':
       case 'Completada':

@@ -1,0 +1,2 @@
+Agentes copiados de https://github.com/affaan-m/ECC (MIT), carpeta agents/, commit 3f14a103a8694e51c1df9a806217a6d0b5f7a6f7, el 2026-11-19.
+Seleccion para ORBI Piloto 17A: diseno (architect, planner, code-explorer), revision (code-reviewer, typescript-reviewer, react-reviewer, database-reviewer, security-reviewer, silent-failure-hunter), pruebas (tdd-guide, e2e-runner) y mantenimiento (refactor-cleaner, build-error-resolver).

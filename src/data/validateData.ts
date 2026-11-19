@@ -43,8 +43,8 @@ function runDataValidation() {
 
   // 1. Validar cohorte operacional P01..P14
   const legacyCohortCount = report.legacyReconciliationCohort.totalAuditados;
-  if (legacyCohortCount !== 38) {
-    errors.push(`[Error Cohorte P01..P14] Total en cohorte legacy (${legacyCohortCount}) no coincide con 38`);
+  if (legacyCohortCount !== 39) {
+    errors.push(`[Error Cohorte P01..P14] Total en cohorte legacy (${legacyCohortCount}) no coincide con 39 (38 originales + OT-26-29222 restaurada en 17A)`);
   }
 
   // 2. Validar que no existan errores de regla semántica reportados
@@ -147,7 +147,7 @@ function runDataValidation() {
     process.exit(1);
   } else {
     console.log('\n✅ [PASS] INTEGRIDAD DE DATOS Y TAXONOMÍA DE SCOPES VERIFICADA EXITOSAMENTE (16B.1F)');
-    console.log('   Cohorte P01..P14 (38/38), cohorte BI (502/502), scopes 100% aislados y verificados.');
+    console.log('   Cohorte P01..P14 (39/39), cohorte BI (502/502), scopes 100% aislados y verificados.');
     process.exit(0);
   }
 }

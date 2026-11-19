@@ -40,6 +40,8 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, Escalation, Repuesto, Herramienta, OMInventoryItem, OMInventoryMovement } from '../types';
+import { transitionOT } from '../domain/otStateMachine';
+import type { RoleType } from '../types';
 import { loadInventory, saveInventory, loadInventoryMovements, saveInventoryMovements } from '../data/db';
 
 interface VistaTerrenoProps {
@@ -503,17 +505,36 @@ export default function VistaTerreno({
   const blockedOts = supervisorOts.filter(o => o.bloqueada || o.estado === 'Bloqueada');
   const pendingEvidenceOts = supervisorOts.filter(o => o.evidencePack && o.evidencePack.some(ev => ev.status === 'Pendiente'));
 
+  // 17A: toda transición de estado pasa por la máquina de estados única
+  const runTransition = (base: OT, desired: OT, comentario: string): OT | null => {
+    const { estado, lifecycleHistory: _lh, historialCambios: _hc, ...patch } = desired;
+    if (estado === base.estado) return { ...base, ...patch };
+    const result = transitionOT(base, estado, {
+      usuario: activeUserName,
+      rol: userRole as RoleType,
+      escalaciones,
+      comentario
+    }, patch);
+    if (result.ok === false) {
+      alert(result.error);
+      return null;
+    }
+    return result.ot;
+  };
+
   // 1. CONFIRMAR LLEGADA A PLANTA
   const handleConfirmArrival = () => {
     if (!selectedOt) return;
     
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
       llegadaConfirmada: true,
       horaLlegadaSimulada: tempHoraLlegada,
       observacionLlegada: tempObsLlegada,
       estado: 'En terreno'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'Llegada confirmada a planta');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -551,7 +572,7 @@ export default function VistaTerreno({
       return;
     }
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
       astFirmado: true,
       firmaEjecutorSimulada: tempFirmaEjecutor,
@@ -561,6 +582,8 @@ export default function VistaTerreno({
       permisoTrabajoNumero: tempPermisoTrabajoNum,
       estado: 'En ejecución'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'AST firmada, inicio de ejecución');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -1005,13 +1028,16 @@ export default function VistaTerreno({
       return;
     }
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
+      checklistExecution: tempChecklist,
       propuestaCierreTerreno: true,
       comentarioPropuestaCierre: comentarioCierre || 'Checklist finalizado sin novedades. Se solicita cierre de la OT en terreno.',
       estado: 'Lista para revisión',
       resultadoTerreno: 'Exitoso'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'Técnico propone cierre en terreno');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -1044,12 +1070,14 @@ export default function VistaTerreno({
       return;
     }
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
       bloqueada: true,
       motivoBloqueo: `[${blockerType}] - ${blockerComment}`,
       estado: 'Bloqueada'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'Bloqueo registrado en terreno');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -1132,7 +1160,7 @@ export default function VistaTerreno({
     const ot = ots.find(o => o.codigo === otCode);
     if (!ot) return;
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...ot,
       propuestaCierreTerreno: false,
       estado: 'En ejecución',
@@ -1148,6 +1176,8 @@ export default function VistaTerreno({
         }
       ]
     };
+    const updatedOT = runTransition(ot, desiredOT, `Devuelta a ejecución por supervisor. Motivo: ${comments || 'sin comentario'}`);
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === otCode);
     if (index !== -1) {
@@ -1172,7 +1202,7 @@ export default function VistaTerreno({
     const ot = ots.find(o => o.codigo === otCode);
     if (!ot) return;
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...ot,
       propuestaCierreTerreno: false,
       estado: 'Cerrada',
@@ -1197,6 +1227,8 @@ export default function VistaTerreno({
         }
       ]
     };
+    const updatedOT = runTransition(ot, desiredOT, `Cierre aprobado por supervisor de terreno. ${comments || ''}`.trim());
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === otCode);
     if (index !== -1) {
