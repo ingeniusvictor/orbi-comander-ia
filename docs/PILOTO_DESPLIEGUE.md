@@ -12,6 +12,24 @@ Guía para instalar el piloto en un servidor y entregar acceso a técnicos y sup
 - **Cola de cambios pendientes:** si se corta la señal, los cambios de OTs y colecciones esperan en el teléfono y se envían al volver la conexión (indicador "sin sincronizar" en la cabecera).
 - **Respaldos automáticos** al iniciar y cada 24 h (se conservan 14).
 
+## Qué incluye la Fase 2
+
+- **Activos y Preventivos** (menú "Mando O&M", para planificación y jefatura): árbol de activos por planta con importación desde CSV, planes preventivos con periodicidad, plantillas de checklist y catálogos de códigos.
+- **OTs preventivas automáticas:** el servidor genera las OTs de cada plan cuando entran en su ventana de anticipación (al iniciar, cada día y con el botón "Generar OTs ahora"). Nunca duplica una OT del mismo plan y fecha.
+- **Motivo de espera obligatorio** al pasar una OT a espera, y **codificación de falla** (problema, causa, acción) obligatoria para cerrar correctivas.
+- **Horas hombre por técnico** (fecha, hora de inicio y fin); el total de la OT es la suma.
+- **Checklist con respuestas numéricas:** un valor fuera de rango queda marcado como hallazgo.
+
+### Cargar activos reales
+
+En "Activos y Preventivos" → "Activos" → "Importar desde CSV", pegar el contenido de un CSV con encabezado:
+
+```
+id;padre;planta;codigo;nombre;tipo;fabricante;modelo;serie
+```
+
+`planta` es el id del catastro (por ejemplo `ORBI-PV-058`); `tipo` uno de: Planta, Area, Inversor, Transformador, Celda MT, Tracker, String, Estacion Meteo, SCADA, Otro.
+
 ## Instalación con Docker
 
 ```bash

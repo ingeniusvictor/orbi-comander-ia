@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { PlanPreventivo, Planta, OT, OTEstado, OTType, OTPrioridad, OrganigramaNode, RoleType } from '../types';
 import { transitionOT } from '../domain/otStateMachine';
+import { loadCodes } from './CmmsMaestros';
 import {
   WorkspaceViewSelector,
   WorkspaceWeekView,
@@ -216,6 +217,18 @@ export default function Workspace({
   // 17A: aplica cambios a una OT; si cambia el estado, pasa por la máquina de estados única.
   const withEstado = (o: OT, to: OTEstado | undefined, patch: Partial<OT>, comentario: string): OT | null => {
     if (!to || to === o.estado) return { ...o, ...patch };
+    // Fase 2: pasar a "Bloqueada" exige un motivo codificado
+    if (to === 'Bloqueada' && !patch.motivoEsperaCodigo && !o.motivoEsperaCodigo) {
+      const codes = loadCodes().espera;
+      const answer = window.prompt(`Motivo de la espera (escribe el código):\n${codes.map(c => `${c.codigo} — ${c.descripcion}`).join('\n')}`, 'OTRO');
+      const code = answer?.trim().toUpperCase();
+      if (!code) return null;
+      if (!codes.some(c => c.codigo === code)) {
+        alert(`Código de espera desconocido: ${code}`);
+        return null;
+      }
+      patch = { ...patch, motivoEsperaCodigo: code };
+    }
     const result = transitionOT(o, to, { usuario: username, rol: userRole as RoleType, comentario, escalaciones: escalas }, patch);
     if (result.ok === false) {
       alert(result.error);

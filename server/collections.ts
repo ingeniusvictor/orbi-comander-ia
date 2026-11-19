@@ -16,6 +16,15 @@ const MGMT: RoleType[] = ['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADO
 const SUPERVISION: RoleType[] = [...MGMT, 'SUPERVISOR_TERRENO', 'PLANIFICACION', 'INGENIERO_OM'];
 const OPERATIVOS: RoleType[] = [...SUPERVISION, 'TECNICO_OM', 'HSE', 'CALIDAD', 'COMISIONAMIENTO'];
 const TECH: RoleType[] = ['TECNICO_OM'];
+const PLANNERS: RoleType[] = [...MGMT, 'PLANIFICACION'];
+
+/** Fase 2: maestros CMMS. */
+export const CMMS_KEYS = {
+  ASSETS: 'orbi_cmms_assets_v1',
+  TEMPLATES: 'orbi_cmms_checklist_templates_v1',
+  PLANS: 'orbi_cmms_pm_plans_v1',
+  CODES: 'orbi_cmms_codes_v1',
+} as const;
 
 interface CollectionPolicy {
   write: RoleType[];
@@ -35,11 +44,12 @@ export const SHARED_COLLECTIONS: Record<string, CollectionPolicy> = {
   [STORAGE_KEYS.DB_PTW]: { write: OPERATIVOS },
   [STORAGE_KEYS.DB_INVENTORY]: { write: OPERATIVOS },
   [STORAGE_KEYS.DB_INVENTORY_MOVEMENTS]: { write: OPERATIVOS, appendOnlyFor: TECH },
-  [STORAGE_KEYS.DB_EVIDENCE_PACK]: { write: OPERATIVOS, appendOnlyFor: TECH },
-  [STORAGE_KEYS.DB_FIELD_EXECUTION]: { write: OPERATIVOS, appendOnlyFor: TECH },
-  [STORAGE_KEYS.DB_CHECKLIST_EXECUTION]: { write: OPERATIVOS },
-  [STORAGE_KEYS.DB_FIELD_BLOCKERS]: { write: OPERATIVOS, appendOnlyFor: TECH },
-  [STORAGE_KEYS.DB_FIELD_CLOSURE_REQUESTS]: { write: OPERATIVOS, appendOnlyFor: TECH },
+  // Las bitácoras locales de Vista Terreno (evidencias, ejecución, checklist, bloqueos, solicitudes de cierre)
+  // no se comparten: duplican datos que ya viajan en la OT y crecerían sin límite.
+  [CMMS_KEYS.ASSETS]: { write: PLANNERS },
+  [CMMS_KEYS.TEMPLATES]: { write: PLANNERS },
+  [CMMS_KEYS.PLANS]: { write: PLANNERS },
+  [CMMS_KEYS.CODES]: { write: MGMT },
 };
 
 export const MAX_COLLECTION_BYTES = 2 * 1024 * 1024;

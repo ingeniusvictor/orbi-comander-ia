@@ -299,3 +299,58 @@ test('API: espacios en el usuario no evitan el límite de intentos', async () =>
     assert.equal(last, 429);
   } finally { server.close(); }
 });
+
+// ---------------- Fase 2 ----------------
+
+test('HH por líneas: el total se calcula en el servidor y el técnico solo agrega sus propias líneas', () => {
+  const linea = (id: string, tecnico: string, horas: number) => ({ id, tecnico, fecha: '2026-11-19', horaInicio: '08:00', horaFin: '12:00', horas });
+  const s0: StoredOT = { ot: makeOT(), version: 1, fieldVersions: {} };
+  const a = applyOTPatch(s0, { baseVersion: 1, changes: { laborLines: [linea('l1', 'Victor Leon', 4)], hhReales: 99 } }, tecnico, noFiles);
+  if (a.ok === false) throw new Error(a.error);
+  assert.equal(a.stored.ot.hhReales, 4);
+  const otro = applyOTPatch(a.stored, { baseVersion: 2, changes: { laborLines: [linea('l1', 'Victor Leon', 4), linea('l2', 'Otro Técnico', 3)] } }, tecnico, noFiles);
+  assert.equal(otro.ok, false);
+  const editar = applyOTPatch(a.stored, { baseVersion: 2, changes: { laborLines: [linea('l1', 'Victor Leon', 8)] } }, tecnico, noFiles);
+  assert.equal(editar.ok, false);
+  const sup = applyOTPatch(a.stored, { baseVersion: 2, changes: { laborLines: [linea('l1', 'Victor Leon', 8)] } }, supervisor, noFiles);
+  assert.equal(sup.ok && sup.stored.ot.hhReales, 8);
+});
+
+test('API: planificación genera OTs preventivas una sola vez; un técnico no puede', async () => {
+  const { server, base } = await startApi();
+  try {
+    const jefe = await login(base, 'jefe', 'clave-jefe-1234');
+    const tech = await login(base, 'vleon', 'clave-tecnico-1');
+    assert.equal((await tech('/pm/generate', { method: 'POST' })).status, 403);
+    const first = await (await jefe('/pm/generate', { method: 'POST' })).json();
+    const second = await (await jefe('/pm/generate', { method: 'POST' })).json();
+    assert.equal(second.creadas.length, 0);
+    const ots = (await (await jefe('/ots')).json()).ots as OT[];
+    for (const code of first.creadas) assert.ok(ots.some(o => o.codigo === code && o.pmPlanId));
+  } finally { server.close(); }
+});
+
+test('historial de cambios: se combina sin conflictos ni duplicados', () => {
+  const s0: StoredOT = { ot: makeOT({ historialCambios: [{ fecha: 'a', usuario: 'x', accion: 'Llegada', detalle: 'ok' }] }), version: 1, fieldVersions: {} };
+  // Otro usuario agrega una entrada (versión 2)
+  const a = applyOTPatch(s0, { baseVersion: 1, changes: { historialCambios: [...s0.ot.historialCambios!, { fecha: 'b', usuario: 'y', accion: 'Nota', detalle: 'n1' }] } }, supervisor, noFiles);
+  if (a.ok === false) throw new Error(a.error);
+  // El técnico, basado en la versión 1, agrega otra entrada y reenvía la existente
+  const b = applyOTPatch(a.stored, { baseVersion: 1, changes: { historialCambios: [...s0.ot.historialCambios!, { fecha: 'c', usuario: 'z', accion: 'Checklist', detalle: 'c1' }] } }, tecnico, noFiles);
+  if (b.ok === false) throw new Error(b.error);
+  assert.deepEqual(b.conflicts, []);
+  assert.deepEqual(b.stored.ot.historialCambios?.map(h => h.accion), ['Llegada', 'Nota', 'Checklist']);
+  assert.equal(b.stored.ot.historialCambios?.[2].usuario, 'Victor Leon');
+});
+
+test('HH de dos técnicos en la misma OT al mismo tiempo: no se pierden', () => {
+  const linea = (id: string, tecnico: string) => ({ id, tecnico, fecha: '2026-11-19', horaInicio: '08:00', horaFin: '12:00', horas: 4 });
+  const otro = { displayName: 'Rodrigo Cisterna', role: 'TECNICO_OM' as const };
+  const s0: StoredOT = { ot: makeOT({ tecnicoAsignado: 'Rodrigo Cisterna' }), version: 1, fieldVersions: {} };
+  const a = applyOTPatch(s0, { baseVersion: 1, changes: { laborLines: [linea('a', 'Victor Leon')] } }, tecnico, noFiles);
+  if (a.ok === false) throw new Error(a.error);
+  const b = applyOTPatch(a.stored, { baseVersion: 1, changes: { laborLines: [linea('b', 'Rodrigo Cisterna')] } }, otro, noFiles);
+  if (b.ok === false) throw new Error(b.error);
+  assert.deepEqual(b.stored.ot.laborLines?.map(l => l.id).sort(), ['a', 'b']);
+  assert.equal(b.stored.ot.hhReales, 8);
+});

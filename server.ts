@@ -12,6 +12,7 @@ import { openDb, backupDb, dataDir } from './server/db';
 import { sessionMiddleware, requireAuth, requireCsrfHeader, purgeExpiredSessions, countUsers } from './server/auth';
 import { createApiRouter } from './server/routes';
 import { seedIfEmpty } from './server/repo';
+import { runPmGeneration } from './server/pm';
 import fs from 'node:fs';
 
 dotenv.config();
@@ -83,6 +84,17 @@ async function startServer() {
     console.warn('[ORBI] No hay usuarios. Crea el primero con: npm run user -- create <usuario> <ROL> "<Nombre como en las OTs>"');
   }
   scheduleBackups(db);
+  // Fase 2: generación de OTs preventivas al iniciar y cada 24 h
+  const pmRun = () => {
+    try {
+      const { creadas } = runPmGeneration(db);
+      if (creadas.length) console.log(`[ORBI] OTs preventivas generadas: ${creadas.join(', ')}`);
+    } catch (error) {
+      console.error('[ORBI] Falló la generación de preventivos:', error);
+    }
+  };
+  pmRun();
+  setInterval(pmRun, 24 * 60 * 60 * 1000).unref();
   setInterval(() => purgeExpiredSessions(db), 60 * 60 * 1000).unref();
 
   // JSON global de 256 kb; las colecciones compartidas tienen su propio límite (2 MB)

@@ -20,6 +20,7 @@ import {
 import { applyOTPatch, prepareNewOT, canReadOT, type OTPatchRequest } from './otSync';
 import { isSharedCollection, canWriteCollection, canReadCollection, violatesAppendOnly, MAX_COLLECTION_BYTES } from './collections';
 import * as repo from './repo';
+import { runPmGeneration } from './pm';
 import { STORAGE_KEYS } from '../src/data/storage';
 import type { OT, Escalation } from '../src/types';
 
@@ -198,6 +199,17 @@ export function createApiRouter(db: Db): express.Router {
       return;
     }
     res.json({ version });
+  });
+
+  // ---------- Planes preventivos ----------
+  router.post('/pm/generate', (req, res) => {
+    if (!['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADOR_OM', 'PLANIFICACION'].includes(req.user!.role)) {
+      res.status(403).json({ error: 'Solo planificación puede generar OTs preventivas.' });
+      return;
+    }
+    const result = runPmGeneration(db, undefined, req.user!.displayName);
+    repo.addAudit(db, { userId: req.user!.id, usuario: req.user!.displayName, rol: req.user!.role, accion: 'Generación de preventivos', modulo: 'Planes preventivos', comentario: `${result.creadas.length} OT(s): ${result.creadas.join(', ')}`, criticidad: 'Media' });
+    res.json(result);
   });
 
   // ---------- Auditoría ----------

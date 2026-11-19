@@ -48,6 +48,7 @@ import PTWCenter from './PTWCenter';
 import OMInventory from './OMInventory';
 import SchedulerIA from './SchedulerIA';
 import ReportCenter from './ReportCenter';
+import OTMaintenanceFields from './OTMaintenanceFields';
 
 interface OTManagerProps {
   ots: OT[];
@@ -2917,6 +2918,14 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                   </button>
                 )}
               </div>
+
+              {/* 17A Fase 2: activo, motivo de espera, codificación de falla y horas hombre */}
+              <OTMaintenanceFields
+                ot={editingOt}
+                userName={activeUserName}
+                canEditPlanning={['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADOR_OM', 'PLANIFICACION', 'SUPERVISOR_TERRENO'].includes(userRole)}
+                onChange={(patch) => setEditingOt({ ...editingOt, ...patch })}
+              />
 
               {/* State transition control block */}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-900">

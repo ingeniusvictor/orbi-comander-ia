@@ -11,6 +11,7 @@
  */
 import type { OT, OTEstado, RoleType } from '../src/types';
 import { transitionOT, softwrenchCodeOf } from '../src/domain/otStateMachine';
+import { validateLaborLine, totalLaborHours, type LaborLine } from '../src/domain/cmms';
 
 export interface StoredOT {
   ot: OT;
@@ -47,13 +48,15 @@ const TECH_EDITABLE = new Set([
   'bloqueada', 'motivoBloqueo', 'escalada', 'motivoEscalamiento',
   'evidencePack', 'evidencias', 'evidencia', 'observaciones', 'historialCambios',
   'repuestos', 'repuestosRequeridas', 'herramientasRequeridas',
+  // Fase 2
+  'laborLines', 'motivoEsperaCodigo', 'codigoFalla',
 ]);
 
 /** Roles que revisan evidencias (pueden aprobar/rechazar o borrar evidencias aprobadas). */
 const EVIDENCE_REVIEWERS: RoleType[] = ['SUPERVISOR_TERRENO', 'COORDINADOR_OM', 'JEFE_OM', 'SUPER_ADMIN_ORBI', 'HSE', 'CALIDAD'];
 
 /** Listas que deben ser arreglos si vienen en el cambio. */
-const ARRAY_FIELDS = ['approvals', 'historialCambios', 'evidencePack', 'checklist', 'checklistExecution', 'evidencias'];
+const ARRAY_FIELDS = ['approvals', 'historialCambios', 'evidencePack', 'checklist', 'checklistExecution', 'evidencias', 'laborLines'];
 
 export const READ_ONLY_ROLES: RoleType[] = ['LECTURA_CLIENTE'];
 export const CREATE_ROLES: RoleType[] = ['SUPER_ADMIN_ORBI', 'JEFE_OM', 'COORDINADOR_OM', 'PLANIFICACION', 'GERENCIA', 'SUPERVISOR_TERRENO'];
@@ -135,10 +138,24 @@ function mergeAppendOnly(
   }
 
   if ('historialCambios' in changes) {
+    // Lista de solo agregar: se suman las entradas nuevas del cliente (por acción + detalle) y se firman
+    // con el usuario de la sesión. Las transiciones de estado las registra el propio servidor.
     const prev = current.historialCambios || [];
-    const next = changes.historialCambios || [];
-    const added = next.length > prev.length ? next.slice(prev.length) : [];
-    out.historialCambios = [...prev, ...added.map(h => ({ ...h, usuario: actor.displayName, fecha: now }))];
+    const known = new Map<string, number>();
+    for (const h of prev) {
+      const k = `${h.accion}|${h.detalle}`;
+      known.set(k, (known.get(k) ?? 0) + 1);
+    }
+    const added: typeof prev = [];
+    for (const h of changes.historialCambios || []) {
+      if (h.accion === 'Transición Estado') continue;
+      const k = `${h.accion}|${h.detalle}`;
+      const n = known.get(k) ?? 0;
+      if (n > 0) known.set(k, n - 1);
+      else added.push({ ...h, usuario: actor.displayName, fecha: now });
+    }
+    if (added.length) out.historialCambios = [...prev, ...added];
+    else delete out.historialCambios;
   }
 
   if ('evidencePack' in changes) {
@@ -166,6 +183,29 @@ function mergeAppendOnly(
         }
       }
     }
+  }
+
+  if ('laborLines' in changes) {
+    const prevById = new Map((current.laborLines || []).map(l => [l.id, l]));
+    const next = (changes.laborLines || []) as LaborLine[];
+    for (const line of next) {
+      const err = validateLaborLine(line);
+      if (err) return { ok: false, error: err };
+      const prev = prevById.get(line.id);
+      if (actor.role === 'TECNICO_OM') {
+        // Un técnico solo agrega sus propias líneas; no edita ni borra las registradas
+        if (prev && !sameValue(prev, line)) return { ok: false, error: 'Una línea de HH registrada solo la corrige un supervisor.' };
+        if (!prev && line.tecnico !== actor.displayName) return { ok: false, error: 'Solo puedes registrar tus propias horas.' };
+      }
+    }
+    if (actor.role === 'TECNICO_OM' && [...prevById.keys()].some(id => !next.some(l => l.id === id))) {
+      return { ok: false, error: 'Una línea de HH registrada solo la elimina un supervisor.' };
+    }
+    // Las HH registradas de la OT son la suma de las líneas
+    out.hhReales = totalLaborHours(next);
+  } else if ('hhReales' in changes && (current.laborLines?.length ?? 0) > 0) {
+    // Con líneas registradas, el total no se edita a mano
+    out.hhReales = totalLaborHours(current.laborLines);
   }
 
   for (const [field, role] of [['validacionHSE', 'hse'], ['validacionCalidad', 'calidad']] as const) {
@@ -219,6 +259,14 @@ export function applyOTPatch(
     const incoming = (changes as Record<string, unknown>)[key];
     const current = (stored.ot as unknown as Record<string, unknown>)[key];
     if (changedAt > req.baseVersion && !sameValue(incoming, current)) {
+      if (key === 'historialCambios') continue; // se combina (solo agregar), nunca es conflicto
+      if (key === 'laborLines' && Array.isArray(incoming)) {
+        // Varios técnicos registran horas en la misma OT: se combinan por id
+        const merged = new Map((stored.ot.laborLines || []).map(l => [l.id, l]));
+        for (const l of incoming as NonNullable<OT['laborLines']>) merged.set(l.id, l);
+        changes.laborLines = [...merged.values()];
+        continue;
+      }
       if (key === 'evidencePack' && Array.isArray(incoming)) {
         const merged = new Map((stored.ot.evidencePack || []).map(e => [e.evidenceId, e]));
         for (const ev of incoming as OT['evidencePack'] & object) merged.set(ev.evidenceId, ev);

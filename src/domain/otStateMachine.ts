@@ -9,6 +9,7 @@
  * para mantener el mismo lenguaje operativo que usan hoy los equipos.
  */
 import type { OT, OTEstado, RoleType } from '../types';
+import { implicitWaitCode, requiresFailureCode } from './cmms';
 
 /** Códigos de estado de SoftWrench / Maximo. */
 export type SoftwrenchCode =
@@ -162,6 +163,12 @@ export function closureBlockers(ot: OT, ctx: Pick<TransitionContext, 'escalacion
   if (escalamientoCritico) {
     errors.push('Existe un escalamiento Alta/Crítica abierto para esta OT.');
   }
+  if (requiresFailureCode(ot.tipo)) {
+    const f = ot.codigoFalla;
+    if (!f || !f.problema || !f.causa || !f.accion) {
+      errors.push('Una OT correctiva necesita la codificación de falla (problema, causa y acción).');
+    }
+  }
   const esCritica = ot.criticidad === 'Crítica' || ot.prioridad === 'Crítica';
   if (esCritica && !ot.approvals?.some(a => JEFE_OM_APPROVAL_ROLES.includes(a.rol))) {
     errors.push('Una OT crítica requiere la aprobación del Jefe de O&M.');
@@ -202,6 +209,12 @@ export function transitionOT(
   if (entraARevision) {
     const errors = executionBlockers(candidate);
     if (errors.length) return { ok: false, error: `No se puede marcar como ejecutada: ${errors.join(' ')}` };
+  }
+  if (toCode === 'HOLD') {
+    // Como en Maximo/SoftWrench: toda espera lleva su motivo codificado
+    const code = candidate.motivoEsperaCodigo || implicitWaitCode(to);
+    if (!code) return { ok: false, error: 'Indica el motivo de la espera (código) antes de pasar la OT a espera.' };
+    candidate.motivoEsperaCodigo = code;
   }
   if (toCode === 'CLOSED') {
     if (!ROLES_CIERRE.includes(ctx.rol)) {

@@ -480,7 +480,14 @@ Before approving any subsequent build or turn, verify the following 12 test path
     - Cola persistente de cambios pendientes con reintento; fotos reales reducidas a 1600 px.
     - Respaldos automáticos diarios; datos demo solo con `ORBI_SEED_DEMO=true`. Guía: `docs/PILOTO_DESPLIEGUE.md`.
     - **Regla para agentes:** ningún módulo debe escribir el estado de una OT ni campos de firma/validación sin pasar por el servidor; los usuarios se administran con `npm run user`.
-  - **Fase 2 — Entidades CMMS:** activos con jerarquía, plantillas de checklist, planes preventivos que generan OTs, líneas de HH por técnico, códigos de espera y de falla.
+  - **Fase 2 — Entidades CMMS (HECHA en esta rama):**
+    - Dominio compartido `src/domain/cmms.ts`: activos con jerarquía (validación de ciclos, importación CSV), plantillas de checklist con tipo de respuesta (OK/No OK, número con rango, texto) y versión, planes preventivos con periodicidad, líneas de HH, catálogos de códigos de espera y de falla.
+    - Maestros como colecciones compartidas (`orbi_cmms_*`), editables por planificación y jefatura en el módulo "Activos y Preventivos" (`src/components/CmmsMaestros.tsx`).
+    - Generador de OTs preventivas en el servidor (`server/pm.ts`): al iniciar, cada 24 h y a pedido; idempotente por plan y fecha (tabla `pm_generated`); usa la fecha de Chile (`ORBI_TZ`).
+    - Reglas nuevas en `transitionOT`: pasar a espera exige código de motivo; cerrar una correctiva o emergencia exige codificación de falla (problema, causa, acción).
+    - HH por técnico: el técnico solo agrega sus propias líneas; el total `hhReales` lo calcula el servidor.
+    - Ficha de OT y Vista Terreno: activo del catastro, motivo de espera, codificación de falla, líneas de HH y respuestas numéricas con detección de fuera de rango (`src/components/OTMaintenanceFields.tsx`).
+    - Datos demo (solo `ORBI_SEED_DEMO=true`): activos de Cantillana (39 inversores SG250HX en 3 estaciones + C2), 2 plantillas y 2 planes (`src/data/cmmsSeed.ts`).
   - **Fase 3 — Terreno:** checklist con foto por pregunta y modo sin conexión con sincronización.
   - **Fase 4 — Prueba de punta a punta:** preventivo anual de inversores en Cantillana y un correctivo, de creación a cierre.
 - **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.

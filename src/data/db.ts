@@ -450,7 +450,9 @@ export const INITIAL_OTS: OT[] = [
   // 17A: caso de referencia correctivo como dato semilla (antes lo creaba ReportCenter al abrirse)
   {
       codigo: 'OT-26-29222',
-      plantaId: 'P10',
+      plantaId: 'ORBI-PV-058',
+      legacyPlantId: 'P10',
+      activoId: 'CANT-C2',
       plantaNombre: 'Cantillana',
       activo: 'Inversor Central C2 (Sungrow)',
       tipo: 'Correctiva',
@@ -469,6 +471,7 @@ export const INITIAL_OTS: OT[] = [
       diagnosticoInicial: 'Alarma de fallo crítico de comunicación interna. Inversor offline. Código Sungrow E-12.',
       diagnosticoFinalTerreno: 'Tarjeta de control quemada por sobretemperatura severa. No admite reparación.',
       accionRealizadaTerreno: 'Reemplazo físico de tarjeta de control Sungrow, cableado de bus RS-485 y calibración con firmware v2.4.',
+      codigoFalla: { problema: 'INV-OFF', causa: 'TARJETA', accion: 'REEMPLAZO' },
       resultadoTerreno: 'Exitoso',
       repuestosRequeridos: ['Tarjeta de control C2'],
       repuestos: ['Tarjeta de control C2'],

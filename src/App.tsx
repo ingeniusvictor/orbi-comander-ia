@@ -83,6 +83,7 @@ import {
 import { STORAGE_ERROR_EVENT } from './data/storage';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
+import CmmsMaestros from './components/CmmsMaestros';
 import {
   getSession, logout, bootstrapCollections, pollCollections, fetchOTs, fetchAudit, postAudit, initOutbox, processOutbox,
   queueOTChanges, hasPendingOT, setServerOTListener, clearLocalMirrorAndReload, ApiError, SYNC_EVENTS, type SessionInfo,
@@ -371,6 +372,7 @@ export default function App() {
       items: [
         { id: 'Home', label: 'Home Jefatura O&M', icon: Cpu },
         { id: 'OTs', label: 'ORBI OT Center', icon: FileText },
+        { id: 'Maestros', label: 'Activos y Preventivos', icon: Wrench },
         { id: 'Workspace', label: 'ORBI Workspace', icon: Calendar },
         { id: 'BI', label: 'ORBI Insight Center', icon: BarChart2 },
       ]
@@ -535,6 +537,10 @@ export default function App() {
                 <div className="text-[9px] font-mono tracking-widest text-slate-500 uppercase px-2 font-black border-b border-slate-900 pb-1">{section.title}</div>
                 <nav className="space-y-0.5">
                   {section.items.filter((item) => {
+                    // 17A Fase 2: los maestros de mantenimiento no se muestran a técnicos ni clientes
+                    if (item.id === 'Maestros' && ['TECNICO_OM', 'LECTURA_CLIENTE'].includes(userRole)) {
+                      return null;
+                    }
                     if (item.id === 'DemoReadiness' || item.id === 'DemoHub') {
                       return ['SUPER_ADMIN_ORBI', 'JEFE_OM', 'SUPERVISOR_TERRENO', 'COORDINADOR_OM'].includes(userRole);
                     }
@@ -678,6 +684,10 @@ export default function App() {
               onUpdate={handleUpdateFindings}
               userRole={userRole}
             />
+          )}
+
+          {activeView === 'Maestros' && (
+            <CmmsMaestros plantas={plantas} userRole={userRole} />
           )}
 
           {activeView === 'Workspace' && (

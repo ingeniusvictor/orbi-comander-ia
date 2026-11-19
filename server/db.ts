@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at);
 
+-- Fase 2: OTs generadas por planes preventivos (idempotencia por plan y fecha)
+CREATE TABLE IF NOT EXISTS pm_generated (
+  plan_id     TEXT NOT NULL,
+  fecha       TEXT NOT NULL,
+  ot_codigo   TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL,
+  PRIMARY KEY (plan_id, fecha)
+);
+
 CREATE TABLE IF NOT EXISTS files (
   id           TEXT PRIMARY KEY,
   ot_codigo    TEXT NOT NULL,
@@ -117,5 +126,14 @@ export function backupDb(db: Db, destDir = path.join(dataDir(), 'backups')): str
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dest = path.join(destDir, `orbi-${stamp}.sqlite`);
   db.prepare('VACUUM INTO ?').run(dest);
+  // Verificar que el respaldo se pueda abrir y esté íntegro
+  const check = new DatabaseSync(dest, { readOnly: true });
+  try {
+    const row = check.prepare('PRAGMA integrity_check').get() as { integrity_check: string };
+    if (row.integrity_check !== 'ok') throw new Error(`Respaldo dañado: ${row.integrity_check}`);
+  } finally {
+    check.close();
+  }
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   return dest;
 }

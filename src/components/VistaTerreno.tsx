@@ -42,6 +42,19 @@ import {
 import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, Escalation, Repuesto, Herramienta, OMInventoryItem, OMInventoryMovement } from '../types';
 import { transitionOT } from '../domain/otStateMachine';
 import { uploadPhoto } from '../data/serverSync';
+import OTMaintenanceFields from './OTMaintenanceFields';
+import { isOutOfRange } from '../domain/cmms';
+
+/** 17A Fase 2: equivalencia entre el tipo de bloqueo de terreno y el código de espera. */
+const BLOCKER_TO_WAIT_CODE: Record<string, string> = {
+  'Falta de repuesto': 'REPUESTO',
+  'Condición insegura': 'SEGURIDAD',
+  'Clima adverso': 'CLIMA',
+  'Acceso bloqueado': 'CLIENTE',
+  'Falta de herramienta': 'RECURSO',
+  'Sin permiso de trabajo': 'PERMISO',
+  'Equipo no disponible': 'CLIENTE',
+};
 import type { RoleType } from '../types';
 import { loadInventory, saveInventory, loadInventoryMovements, saveInventoryMovements } from '../data/db';
 
@@ -624,6 +637,18 @@ export default function VistaTerreno({
     setTempChecklist(copy);
   };
 
+  // 17A Fase 2: respuesta numérica o de texto; un valor fuera de rango se marca como hallazgo
+  const handleChecklistValue = (index: number, valor: string) => {
+    const copy = [...tempChecklist];
+    const item = { ...copy[index], valor };
+    item.fueraDeRango = isOutOfRange(item);
+    item.completado = valor.trim() !== '';
+    if (item.completado) item.noAplica = false;
+    if (item.fueraDeRango) item.hallazgo = true;
+    copy[index] = item;
+    setTempChecklist(copy);
+  };
+
   const handleUpdateChecklistObs = (index: number, text: string) => {
     const copy = [...tempChecklist];
     copy[index].observacion = text;
@@ -1066,6 +1091,8 @@ export default function VistaTerreno({
       ...selectedOt,
       bloqueada: true,
       motivoBloqueo: `[${blockerType}] - ${blockerComment}`,
+      // 17A Fase 2: motivo de espera codificado (como en SoftWrench)
+      motivoEsperaCodigo: BLOCKER_TO_WAIT_CODE[blockerType] || 'OTRO',
       estado: 'Bloqueada'
     };
     const updatedOT = runTransition(selectedOt, desiredOT, 'Bloqueo registrado en terreno');
@@ -1814,6 +1841,21 @@ export default function VistaTerreno({
                                   <div className="font-semibold text-slate-200 leading-tight">
                                     {item.item}
                                   </div>
+                                  {/* 17A Fase 2: preguntas de plantilla con valor numérico o texto */}
+                                  {(item.tipo === 'numero' || item.tipo === 'texto') && (
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type={item.tipo === 'numero' ? 'text' : 'text'}
+                                        inputMode={item.tipo === 'numero' ? 'decimal' : 'text'}
+                                        placeholder={item.tipo === 'numero' ? `Valor${item.min !== undefined || item.max !== undefined ? ` (${item.min ?? '–'} a ${item.max ?? '–'})` : ''}` : 'Respuesta'}
+                                        value={item.valor ?? ''}
+                                        onChange={(e) => handleChecklistValue(idx, e.target.value)}
+                                        className={`flex-1 bg-slate-900 border rounded px-1.5 py-0.5 text-[11px] text-white outline-none ${item.fueraDeRango ? 'border-amber-500' : 'border-slate-800'}`}
+                                      />
+                                      {item.unidad && <span className="text-[10px] text-slate-400">{item.unidad}</span>}
+                                      {item.fueraDeRango && <span className="text-[9px] text-amber-400 font-bold">Fuera de rango</span>}
+                                    </div>
+                                  )}
                                   
                                   <div className="grid grid-cols-3 gap-1 pt-1 border-t border-slate-900 font-mono text-[9px]">
                                     <button
@@ -2023,6 +2065,20 @@ export default function VistaTerreno({
                               <h4 className="text-xs font-bold text-slate-200">Paso 5: Recursos y Diagnóstico</h4>
                               <p className="text-[10px] text-slate-400">Declare HH estimadas de terreno, insumos utilizados y diagnóstico final.</p>
                             </div>
+
+                            {/* 17A Fase 2: horas por técnico, codificación de falla y motivo de espera */}
+                            <OTMaintenanceFields
+                              ot={selectedOt}
+                              userName={activeUserName}
+                              canEditPlanning={false}
+                              compact
+                              onChange={(patch) => {
+                                const latest = otsLatestRef.current.find(o => o.codigo === selectedOt.codigo) ?? selectedOt;
+                                const updated: OT = { ...latest, ...patch };
+                                setSelectedOt(updated);
+                                onUpdateOts(otsLatestRef.current.map(o => (o.codigo === updated.codigo ? updated : o)));
+                              }}
+                            />
 
                             <div className="space-y-2 bg-slate-900 p-2.5 rounded-xl border border-slate-850 max-h-[260px] overflow-y-auto text-xs">
                               <div className="grid grid-cols-2 gap-2">

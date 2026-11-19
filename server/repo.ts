@@ -5,7 +5,9 @@ import type { Db } from './db';
 import { inTransaction } from './db';
 import type { OT } from '../src/types';
 import type { StoredOT } from './otSync';
-import { SHARED_COLLECTIONS } from './collections';
+import { SHARED_COLLECTIONS, CMMS_KEYS } from './collections';
+import { DEFAULT_CODES } from '../src/domain/cmms';
+import { DEMO_ASSETS, DEMO_TEMPLATES, DEMO_PLANS } from '../src/data/cmmsSeed';
 import { STORAGE_KEYS } from '../src/data/storage';
 import {
   INITIAL_OTS, INITIAL_PLANTAS, INITIAL_HSE_CALIDAD, INITIAL_PLANIFICACION, INITIAL_VEHICULOS,
@@ -128,10 +130,16 @@ export function seedIfEmpty(db: Db, demo: boolean): { ots: number; collections: 
       [STORAGE_KEYS.DB_PTW]: INITIAL_PTWS,
       [STORAGE_KEYS.DB_INVENTORY]: INITIAL_INVENTORY,
       [STORAGE_KEYS.DB_INVENTORY_MOVEMENTS]: INITIAL_INVENTORY_MOVEMENTS,
+      [CMMS_KEYS.ASSETS]: DEMO_ASSETS,
+      [CMMS_KEYS.TEMPLATES]: DEMO_TEMPLATES,
+      [CMMS_KEYS.PLANS]: DEMO_PLANS,
     };
     for (const name of Object.keys(SHARED_COLLECTIONS)) {
       if (getCollection(db, name)) continue;
-      const data = name === STORAGE_KEYS.PLANTAS ? INITIAL_PLANTAS : demo ? (demoData[name] ?? []) : [];
+      // Catastro de plantas y catálogo de códigos son datos maestros: se cargan siempre
+      const data = name === STORAGE_KEYS.PLANTAS ? INITIAL_PLANTAS
+        : name === CMMS_KEYS.CODES ? [DEFAULT_CODES]
+        : demo ? (demoData[name] ?? []) : [];
       saveCollection(db, name, data, 0, 'sistema');
       created.push(name);
     }

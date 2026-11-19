@@ -221,6 +221,17 @@ export interface OT {
   codigo: string;
   /** 17A: versión del servidor en que se basa esta copia (la escribe el servidor). */
   _version?: number;
+  /** 17A Fase 2: activo del catastro jerárquico. */
+  activoId?: string;
+  /** 17A Fase 2: plan preventivo que generó la OT y su fecha programada. */
+  pmPlanId?: string;
+  pmFecha?: string;
+  /** 17A Fase 2: código del motivo de espera (obligatorio al pasar a un estado de espera). */
+  motivoEsperaCodigo?: string;
+  /** 17A Fase 2: codificación de falla (obligatoria para cerrar correctivas y emergencias). */
+  codigoFalla?: { problema: string; causa: string; accion: string };
+  /** 17A Fase 2: horas hombre por técnico; hhReales es la suma de estas líneas cuando existen. */
+  laborLines?: { id: string; tecnico: string; fecha: string; horaInicio: string; horaFin: string; horas: number; actividad?: string }[];
   plantaId: string;
   plantaNombre: string;
   legacyPlantId?: string;

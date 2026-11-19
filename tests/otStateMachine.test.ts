@@ -42,6 +42,7 @@ function baseOT(overrides: Partial<OT> = {}): OT {
     requiereAST: true,
     astFirmado: true,
     checklistExecution: [{ item: 'A', completado: true, noAplica: false } as any],
+    codigoFalla: { problema: 'INV-OFF', causa: 'TARJETA', accion: 'REEMPLAZO' },
     ...overrides,
   } as OT;
 }
@@ -158,4 +159,18 @@ test('pasar de ejecución a revisión exige las mismas reglas que marcar ejecuta
 test('checklist no requerido no bloquea la ejecución', () => {
   const ot = baseOT({ requiereChecklist: false, checklistExecution: [{ item: 'A', completado: false, noAplica: false } as any] });
   assert.equal(transitionOT(ot, 'Finalizada', tecnico).ok, true);
+});
+
+test('Fase 2: pasar a espera exige motivo codificado (salvo estados que lo implican)', () => {
+  assert.equal(transitionOT(baseOT(), 'Bloqueada', tecnico).ok, false);
+  const r = transitionOT(baseOT(), 'Bloqueada', tecnico, { motivoEsperaCodigo: 'CLIMA' });
+  assert.equal(r.ok, true);
+  const rep = transitionOT(baseOT(), 'En espera de repuesto', tecnico);
+  assert.equal(rep.ok && rep.ot.motivoEsperaCodigo, 'REPUESTO');
+});
+
+test('Fase 2: una correctiva no se cierra sin codificación de falla; una preventiva sí', () => {
+  const sinCodigo = baseOT({ estado: 'Finalizada', codigoFalla: undefined });
+  assert.equal(transitionOT(sinCodigo, 'Cerrada', supervisor).ok, false);
+  assert.equal(transitionOT({ ...sinCodigo, tipo: 'Preventiva' } as OT, 'Cerrada', supervisor).ok, true);
 });
