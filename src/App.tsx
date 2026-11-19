@@ -87,7 +87,10 @@ import CmmsMaestros from './components/CmmsMaestros';
 import {
   getSession, logout, bootstrapCollections, pollCollections, fetchOTs, fetchAudit, postAudit, initOutbox, processOutbox,
   queueOTChanges, hasPendingOT, setServerOTListener, clearLocalMirrorAndReload, ApiError, SYNC_EVENTS, type SessionInfo,
+  initCollectionSync, cacheSession, cachedSession, cacheOTs, cachedOTs, isNetworkError, setPhotosResolvedListener, refreshQueuedPhotoCount,
+  resetLocalDataIfUserChanged, clearOTCache,
 } from './data/serverSync';
+import { warmPreviews, replacePlaceholders } from './data/photoQueue';
 
 // Importar Vistas Operacionales
 import HomeEjecutivo from './components/HomeEjecutivo';
@@ -171,6 +174,24 @@ export default function App() {
     setPtws(loadPtws());
   };
 
+  // 17A Fase 3: trabajar sin señal con la copia guardada en el equipo
+  const [isOffline, setIsOffline] = useState<boolean>(typeof navigator !== 'undefined' && navigator.onLine === false);
+
+  const startOffline = (): boolean => {
+    const info = cachedSession();
+    if (!info || info.mustChangePassword) return false;
+    setUserRole(info.user.role);
+    setUserName(info.user.displayName);
+    initOutbox();
+    initCollectionSync();
+    loadLocalCollections();
+    setOts(cachedOTs());
+    void warmPreviews().then(refreshQueuedPhotoCount);
+    setIsOffline(true);
+    setAuthState('ready');
+    return true;
+  };
+
   const startSession = async (session?: SessionInfo) => {
     try {
       const info = session ?? await getSession();
@@ -178,9 +199,15 @@ export default function App() {
         setAuthState('change-password');
         return;
       }
+      const descartados = await resetLocalDataIfUserChanged(info.user.id);
+      if (descartados > 0) {
+        setStorageError(`Se descartaron ${descartados} cambio(s) sin enviar de otro usuario que usó este equipo.`);
+      }
+      cacheSession(info);
       setUserRole(info.user.role);
       setUserName(info.user.displayName);
       initOutbox();
+      void warmPreviews().then(refreshQueuedPhotoCount);
       await bootstrapCollections();
       loadLocalCollections();
       const serverOts = await fetchOTs();
@@ -193,18 +220,37 @@ export default function App() {
       setAuditLogs(await fetchAudit());
       const suggested = ROLES_CONFIG[info.user.role]?.suggestedView;
       if (suggested) setActiveView(suggested);
+      setIsOffline(false);
       setAuthState('ready');
       void processOutbox();
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.body?.code === 'MUST_CHANGE_PASSWORD')) {
         setAuthState(error.status === 401 ? 'login' : 'change-password');
-      } else {
+      } else if (!startOffline()) {
         setAuthState('offline');
       }
     }
   };
 
+  // Copia de trabajo de las OTs en el equipo, para poder abrir la app sin señal
   useEffect(() => {
+    if (authState === 'ready') cacheOTs(ots);
+  }, [ots, authState]);
+
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('offline', goOffline);
+    return () => window.removeEventListener('offline', goOffline);
+  }, []);
+
+  useEffect(() => {
+    // Al subir fotos tomadas sin señal, las OTs pasan a apuntar a la foto definitiva
+    setPhotosResolvedListener((resolved) => {
+      setOts(prev => prev.map(o => {
+        const json = JSON.stringify(o);
+        return [...resolved.keys()].some(k => json.includes(k)) ? JSON.parse(replacePlaceholders(json, resolved)) : o;
+      }));
+    });
     setServerOTListener((serverOt) => {
       setOts(prev => (prev.some(o => o.codigo === serverOt.codigo)
         ? prev.map(o => (o.codigo === serverOt.codigo ? serverOt : o))
@@ -235,8 +281,15 @@ export default function App() {
     if (authState !== 'ready') return;
     const refresh = async () => {
       try {
+        // Si la sesión se abrió sin señal, al volver la conexión se completa la carga desde el servidor
+        if (isOffline) {
+          await getSession();
+          await pollCollections();
+        }
+        // (un 401 aquí lleva a iniciar sesión; ver catch)
         await processOutbox();
         const serverOts = await fetchOTs();
+        setIsOffline(false);
         setOts(prev => {
           const byCode = new Map<string, OT>(prev.map(o => [o.codigo, o]));
           const serverCodes = new Set(serverOts.map(o => o.codigo));
@@ -252,8 +305,13 @@ export default function App() {
           return [...merged, ...localOnly];
         });
         await pollCollections();
-      } catch {
-        /* sin señal: se reintenta en el próximo ciclo */
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          // La sesión expiró mientras no había señal: se pide entrar de nuevo; la cola se conserva
+          setAuthState('login');
+        } else if (isNetworkError(error)) {
+          setIsOffline(true);
+        }
       }
     };
     const timer = setInterval(refresh, 20_000);
@@ -267,11 +325,13 @@ export default function App() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [authState]);
+  }, [authState, isOffline]);
 
   const handleLogout = async () => {
     if (pendingSync > 0 && !window.confirm(`Hay ${pendingSync} cambio(s) sin sincronizar. Si cierras sesión ahora quedarán en este equipo hasta que vuelvas a entrar. ¿Cerrar sesión?`)) return;
     try { await logout(); } catch { /* igual se cierra localmente */ }
+    cacheSession(null);
+    clearOTCache();
     window.location.reload();
   };
 
@@ -503,6 +563,11 @@ export default function App() {
           </div>
         </div>
       </header>
+      {isOffline && authState === 'ready' && (
+        <div role="status" className="bg-amber-500 text-slate-950 text-xs font-bold px-4 py-2">
+          Sin señal: trabajando con la copia guardada en este equipo. {pendingSync > 0 ? `${pendingSync} cambio(s) se enviarán` : 'Los cambios se enviarán'} al volver la conexión.
+        </div>
+      )}
       {storageError && (
         <div role="alert" className="bg-rose-600 text-white text-xs font-bold px-4 py-2 flex items-center justify-between gap-3">
           <span>⚠ {storageError}</span>

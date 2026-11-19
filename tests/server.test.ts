@@ -354,3 +354,35 @@ test('HH de dos técnicos en la misma OT al mismo tiempo: no se pierden', () => 
   assert.deepEqual(b.stored.ot.laborLines?.map(l => l.id).sort(), ['a', 'b']);
   assert.equal(b.stored.ot.hhReales, 8);
 });
+
+// ---------------- Fase 3 ----------------
+
+test('foto de checklist: debe existir en el servidor', () => {
+  const s0: StoredOT = { ot: makeOT({ checklistExecution: [{ item: 'A', completado: false }] }), version: 1, fieldVersions: {} };
+  const conFoto = [{ item: 'A', completado: true, fotos: [{ fileId: 'f9', url: '/api/files/f9' }] }];
+  assert.equal(applyOTPatch(s0, { baseVersion: 1, changes: { checklistExecution: conFoto } }, tecnico, noFiles).ok, false);
+  assert.equal(applyOTPatch(s0, { baseVersion: 1, changes: { checklistExecution: conFoto } }, tecnico, id => id === 'f9').ok, true);
+});
+
+test('cola sin señal: reemplazo de identificadores provisorios de fotos', async () => {
+  const { replacePlaceholders } = await import('../src/data/photoQueue');
+  const local = 'local-1234';
+  const text = JSON.stringify({ fileId: local, fileUrl: `pending:${local}`, otra: 'local-9999' });
+  const out = JSON.parse(replacePlaceholders(text, new Map([[local, { id: 'abc', url: '/api/files/abc' }]])));
+  assert.deepEqual(out, { fileId: 'abc', fileUrl: '/api/files/abc', otra: 'local-9999' });
+});
+
+test('cola sin señal: una foto perdida se quita del cambio y el resto se envía', async () => {
+  const { stripDeadPhotoRefs } = await import('../src/data/photoQueue');
+  const op = {
+    changes: {
+      diagnosticoFinalTerreno: 'ok',
+      evidencePack: [{ evidenceId: 'e1', fileId: 'local-muerta' }, { evidenceId: 'e2', fileId: 'local-viva' }, { evidenceId: 'e3', fileId: 'abc' }],
+      checklistExecution: [{ item: 'A', fotos: [{ fileId: 'local-muerta', url: 'pending:local-muerta' }] }],
+    },
+  };
+  const out = stripDeadPhotoRefs(op, new Set(['local-viva']));
+  assert.deepEqual(out.changes.evidencePack.map((e: any) => e.evidenceId), ['e2', 'e3']);
+  assert.deepEqual(out.changes.checklistExecution[0].fotos, []);
+  assert.equal(out.changes.diagnosticoFinalTerreno, 'ok');
+});

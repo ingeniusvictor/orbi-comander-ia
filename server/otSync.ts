@@ -158,6 +158,17 @@ function mergeAppendOnly(
     else delete out.historialCambios;
   }
 
+  if ('checklistExecution' in changes) {
+    const known = new Set((current.checklistExecution || []).flatMap(c => (c.fotos || []).map(f => f.fileId)));
+    for (const item of changes.checklistExecution || []) {
+      for (const f of item.fotos || []) {
+        if (!known.has(f.fileId) && !fileExists(f.fileId)) {
+          return { ok: false, error: 'Una foto del checklist no está en el servidor.' };
+        }
+      }
+    }
+  }
+
   if ('evidencePack' in changes) {
     const reviewer = EVIDENCE_REVIEWERS.includes(actor.role);
     const prevById = new Map((current.evidencePack || []).map(e => [e.evidenceId, e]));

@@ -131,6 +131,11 @@ export function executionBlockers(ot: OT): string[] {
   if (ot.requiereChecklist !== false && ot.checklistExecution && ot.checklistExecution.some(c => !c.completado && !c.noAplica)) {
     errors.push('El checklist de ejecución está incompleto.');
   }
+  // Fase 3: preguntas de plantilla marcadas "requiere foto" no se dan por hechas sin su foto
+  const sinFoto = (ot.checklistExecution || []).filter(c => c.templateId && c.evidenciaRequerida && c.completado && !(c.fotos && c.fotos.length));
+  if (sinFoto.length) {
+    errors.push(`Falta la foto en ${sinFoto.length} pregunta(s) del checklist (p. ej. "${sinFoto[0].item}").`);
+  }
   if (ot.requiereEvidencia && !hasEvidence(ot)) {
     errors.push('Falta subir evidencia fotográfica o documental.');
   }

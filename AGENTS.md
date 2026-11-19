@@ -488,7 +488,12 @@ Before approving any subsequent build or turn, verify the following 12 test path
     - HH por técnico: el técnico solo agrega sus propias líneas; el total `hhReales` lo calcula el servidor.
     - Ficha de OT y Vista Terreno: activo del catastro, motivo de espera, codificación de falla, líneas de HH y respuestas numéricas con detección de fuera de rango (`src/components/OTMaintenanceFields.tsx`).
     - Datos demo (solo `ORBI_SEED_DEMO=true`): activos de Cantillana (39 inversores SG250HX en 3 estaciones + C2), 2 plantillas y 2 planes (`src/data/cmmsSeed.ts`).
-  - **Fase 3 — Terreno:** checklist con foto por pregunta y modo sin conexión con sincronización.
+  - **Fase 3 — Terreno (HECHA en esta rama):**
+    - App instalable (PWA): `public/manifest.webmanifest`, `public/icon.svg` y service worker `public/sw.js` (solo producción). El service worker nunca guarda respuestas de `/api`.
+    - Inicio sin señal: sesión y OTs guardadas en el equipo (`orbi_sync_session`, `orbi_sync_ots_cache`); aviso "Sin señal" y contador de cambios pendientes.
+    - Fotos sin señal: se guardan en IndexedDB (`src/data/photoQueue.ts`) con identificador provisorio `local-…`; al volver la conexión se suben primero y se reemplazan en la cola antes de enviar los cambios de la OT.
+    - Foto por pregunta del checklist; una pregunta de plantilla marcada "requiere foto" no se da por ejecutada sin su foto (regla en `transitionOT` y validación en el servidor).
+    - Probar el modo sin señal con `npm run build` y `npm run serve:prod` (el service worker no se activa en `npm run dev`).
   - **Fase 4 — Prueba de punta a punta:** preventivo anual de inversores en Cantillana y un correctivo, de creación a cierre.
 - **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.

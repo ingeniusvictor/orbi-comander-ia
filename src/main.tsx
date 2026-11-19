@@ -11,3 +11,10 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
+
+// 17A Fase 3: permite abrir la app sin señal (solo en producción; en desarrollo interferiría con Vite)
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => console.error('[ORBI] No se pudo activar el modo sin señal:', error));
+  });
+}

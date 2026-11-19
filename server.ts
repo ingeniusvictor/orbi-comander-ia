@@ -230,6 +230,11 @@ Consulta del usuario: ${rawPrompt || 'Generar Reporte Gerencial Integrado'}`,
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    // El service worker debe revisarse en cada visita para que las actualizaciones lleguen a los teléfonos
+    app.get('/sw.js', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(distPath, 'sw.js'));
+    });
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

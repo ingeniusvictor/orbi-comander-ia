@@ -43,6 +43,7 @@ import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, Escalation, Repu
 import { transitionOT } from '../domain/otStateMachine';
 import { uploadPhoto } from '../data/serverSync';
 import OTMaintenanceFields from './OTMaintenanceFields';
+import { photoSrc, isPendingPhoto } from '../data/photoQueue';
 import { isOutOfRange } from '../domain/cmms';
 
 /** 17A Fase 2: equivalencia entre el tipo de bloqueo de terreno y el código de espera. */
@@ -638,6 +639,32 @@ export default function VistaTerreno({
   };
 
   // 17A Fase 2: respuesta numérica o de texto; un valor fuera de rango se marca como hallazgo
+  // 17A Fase 3: foto asociada a una pregunta del checklist (se guarda en el teléfono si no hay señal)
+  const [checklistPhotoBusy, setChecklistPhotoBusy] = useState<number | null>(null);
+  const tempChecklistRef = useRef(tempChecklist);
+  tempChecklistRef.current = tempChecklist;
+  const handleChecklistPhoto = async (index: number, file: File | undefined) => {
+    if (!selectedOt || !file) return;
+    setChecklistPhotoBusy(index);
+    try {
+      const uploaded = await uploadPhoto(selectedOt.codigo, file);
+      // La subida puede tardar: se usa el checklist más reciente (no el del momento del clic)
+      const copy = [...tempChecklistRef.current];
+      copy[index] = { ...copy[index], fotos: [...(copy[index].fotos || []), { fileId: uploaded.id, url: uploaded.url }] };
+      setTempChecklist(copy);
+      // Se guarda de inmediato en la OT para no perder la referencia a la foto
+      const latest = otsLatestRef.current.find(o => o.codigo === selectedOt.codigo) ?? selectedOt;
+      const updated: OT = { ...latest, checklistExecution: copy };
+      setSelectedOt(updated);
+      onUpdateOts(otsLatestRef.current.map(o => (o.codigo === updated.codigo ? updated : o)));
+      triggerSuccess(uploaded.pending ? 'Foto guardada en el teléfono; se subirá al volver la señal.' : 'Foto agregada a la pregunta.');
+    } catch (error) {
+      alert(`No se pudo guardar la foto: ${(error as Error).message}`);
+    } finally {
+      setChecklistPhotoBusy(null);
+    }
+  };
+
   const handleChecklistValue = (index: number, valor: string) => {
     const copy = [...tempChecklist];
     const item = { ...copy[index], valor };
@@ -757,7 +784,7 @@ export default function VistaTerreno({
       );
       setNewEvidenceLabel('');
       setNewEvidenceDesc('');
-      triggerSuccess('¡Foto subida y guardada en la OT!');
+      triggerSuccess(uploaded.pending ? 'Sin señal: la foto quedó guardada en el teléfono y se subirá sola al volver la conexión.' : '¡Foto subida y guardada en la OT!');
     } catch (error) {
       alert(`No se pudo subir la foto: ${(error as Error).message}. Revisa la señal e intenta de nuevo.`);
     } finally {
@@ -1841,6 +1868,27 @@ export default function VistaTerreno({
                                   <div className="font-semibold text-slate-200 leading-tight">
                                     {item.item}
                                   </div>
+                                  {/* 17A Fase 3: foto por pregunta */}
+                                  {(item.evidenciaRequerida || item.templateId) && (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {(item.fotos || []).map((f: { fileId: string; url: string }) => (
+                                        photoSrc(f.url)
+                                          ? <img key={f.fileId} src={photoSrc(f.url)} alt="" className={`h-9 w-9 object-cover rounded ${isPendingPhoto(f.url) ? 'opacity-70 ring-1 ring-amber-400' : ''}`} />
+                                          : <span key={f.fileId} className="text-[9px] text-amber-400">foto pendiente</span>
+                                      ))}
+                                      <label className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${item.evidenciaRequerida && !(item.fotos || []).length ? 'border-amber-500/50 text-amber-300' : 'border-slate-700 text-slate-400'} ${checklistPhotoBusy === idx ? 'opacity-60' : 'cursor-pointer'}`}>
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          capture="environment"
+                                          className="hidden"
+                                          disabled={checklistPhotoBusy !== null}
+                                          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void handleChecklistPhoto(idx, f); }}
+                                        />
+                                        {checklistPhotoBusy === idx ? 'Guardando…' : item.evidenciaRequerida ? '📷 Foto requerida' : '📷 Foto'}
+                                      </label>
+                                    </div>
+                                  )}
                                   {/* 17A Fase 2: preguntas de plantilla con valor numérico o texto */}
                                   {(item.tipo === 'numero' || item.tipo === 'texto') && (
                                     <div className="flex items-center gap-1.5">
@@ -1956,9 +2004,9 @@ export default function VistaTerreno({
                                 {tempEvidenceList.map((ev) => (
                                   <div key={ev.evidenceId} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-900">
                                     <div className="truncate pr-2 flex items-center gap-1.5">
-                                      {ev.fileUrl && (
-                                        <a href={ev.fileUrl} target="_blank" rel="noopener noreferrer">
-                                          <img src={ev.fileUrl} alt={ev.label} className="h-8 w-8 object-cover rounded" loading="lazy" />
+                                      {photoSrc(ev.fileUrl) && (
+                                        <a href={photoSrc(ev.fileUrl)} target="_blank" rel="noopener noreferrer">
+                                          <img src={photoSrc(ev.fileUrl)} alt={ev.label} className={`h-8 w-8 object-cover rounded ${isPendingPhoto(ev.fileUrl) ? 'opacity-70 ring-1 ring-amber-400' : ''}`} loading="lazy" />
                                         </a>
                                       )}
                                       <span className="text-[8px] bg-indigo-500/15 text-indigo-400 px-1 rounded uppercase font-bold mr-1">{ev.type}</span>

@@ -327,7 +327,7 @@ export interface OT {
   resultadoTerreno?: 'Exitoso' | 'Parcial' | 'No resuelto' | 'Requiere repuesto' | 'Requiere nueva visita' | 'Requiere escalamiento';
   propuestaCierreTerreno?: boolean;
   comentarioPropuestaCierre?: string;
-  checklistExecution?: { item: string; completado: boolean; noAplica?: boolean; observacion?: string; hallazgo?: boolean; evidenciaRequerida?: boolean }[];
+  checklistExecution?: { item: string; completado: boolean; noAplica?: boolean; observacion?: string; hallazgo?: boolean; evidenciaRequerida?: boolean; templateId?: string; fotos?: { fileId: string; url: string }[] }[];
   evidencePack?: OTEvidencePackItem[];
 
   // v0.1.2C Closure, Approvals & Report Pack fields

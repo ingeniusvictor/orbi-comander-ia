@@ -30,6 +30,15 @@ id;padre;planta;codigo;nombre;tipo;fabricante;modelo;serie
 
 `planta` es el id del catastro (por ejemplo `ORBI-PV-058`); `tipo` uno de: Planta, Area, Inversor, Transformador, Celda MT, Tracker, String, Estacion Meteo, SCADA, Otro.
 
+## Qué incluye la Fase 3
+
+- **App instalable en el teléfono:** desde el navegador, "Agregar a pantalla de inicio". Se abre como una app.
+- **Trabajo sin señal:** si el técnico ya entró una vez con señal, la app abre aunque no haya conexión, con sus OTs guardadas en el teléfono. Una franja amarilla avisa "Sin señal" y la cabecera muestra cuántos cambios esperan.
+- **Fotos sin señal:** la foto queda guardada en el teléfono y se sube sola al volver la conexión, antes que los cambios que la mencionan.
+- **Foto por pregunta del checklist:** las preguntas de plantilla marcadas "requiere foto" no se pueden dar por hechas sin su foto.
+
+Recomendación para el piloto: que cada técnico abra la app con señal al inicio de la jornada (en la oficina o el vehículo) para tener su copia de trabajo al día.
+
 ## Instalación con Docker
 
 ```bash
@@ -81,7 +90,6 @@ npm run verify                       # lint + validación de datos + pruebas
 
 ## Limitaciones conocidas del piloto (para declarar ante gerencia)
 
-- **Fotos sin señal:** los cambios de texto esperan en la cola, pero una foto necesita conexión al momento de subirla. El modo sin conexión completo (incluidas fotos) es la Fase 3.
 - **Colecciones compartidas** (inventario, PTW, escalamientos) se guardan como un bloque: si dos personas modifican el mismo bloque a la vez, gana la primera y la segunda ve un aviso para reaplicar su cambio.
 - **Organigrama** sigue guardándose solo en cada navegador (dato maestro de baja edición).
 - **Módulos de presentación** (Executive Demo Hub, Release Center, SharePoint Router, Insight Center) siguen siendo simulaciones; no forman parte del alcance operativo del piloto.

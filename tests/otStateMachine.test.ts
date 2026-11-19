@@ -174,3 +174,13 @@ test('Fase 2: una correctiva no se cierra sin codificación de falla; una preven
   assert.equal(transitionOT(sinCodigo, 'Cerrada', supervisor).ok, false);
   assert.equal(transitionOT({ ...sinCodigo, tipo: 'Preventiva' } as OT, 'Cerrada', supervisor).ok, true);
 });
+
+test('Fase 3: pregunta de plantilla con foto obligatoria no permite marcar ejecutada sin foto', () => {
+  const item = { item: 'Filtros', completado: true, noAplica: false, evidenciaRequerida: true, templateId: 'TPL-1' };
+  assert.equal(transitionOT(baseOT({ checklistExecution: [item] }), 'Finalizada', tecnico).ok, false);
+  const conFoto = { ...item, fotos: [{ fileId: 'f1', url: '/api/files/f1' }] };
+  assert.equal(transitionOT(baseOT({ checklistExecution: [conFoto] }), 'Finalizada', tecnico).ok, true);
+  // Ítems antiguos sin plantilla no se ven afectados
+  const legado = { item: 'Antiguo', completado: true, noAplica: false, evidenciaRequerida: true };
+  assert.equal(transitionOT(baseOT({ checklistExecution: [legado] }), 'Finalizada', tecnico).ok, true);
+});

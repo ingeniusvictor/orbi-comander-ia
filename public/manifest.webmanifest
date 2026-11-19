@@ -1,0 +1,13 @@
+{
+  "name": "ORBI O&M Command Center",
+  "short_name": "ORBI O&M",
+  "description": "Órdenes de trabajo de mantenimiento para plantas fotovoltaicas.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "lang": "es-CL",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
