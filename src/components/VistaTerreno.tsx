@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Smartphone,
   CheckCircle,
@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, Escalation, Repuesto, Herramienta, OMInventoryItem, OMInventoryMovement } from '../types';
 import { transitionOT } from '../domain/otStateMachine';
+import { uploadPhoto } from '../data/serverSync';
 import type { RoleType } from '../types';
 import { loadInventory, saveInventory, loadInventoryMovements, saveInventoryMovements } from '../data/db';
 
@@ -668,84 +669,75 @@ export default function VistaTerreno({
     setNextVisibleStep(3);
   };
 
-  // 4. SUBIR EVIDENCIA SIMULADA
-  const handleUploadSimulatedPhoto = () => {
-    if (!selectedOt) return;
+  // 4. SUBIR EVIDENCIA (17A Fase 1: foto real desde la cámara o la galería del teléfono)
+  const otsLatestRef = useRef(ots);
+  otsLatestRef.current = ots;
+  const handleUploadPhoto = async (file: File | undefined) => {
+    if (!selectedOt || !file) return;
     if (!newEvidenceLabel.trim()) {
       alert('Indique una etiqueta para la evidencia fotográfica (ej: Inversor cerrado, Termografía, etc.)');
       return;
     }
-
     setSimulatingPhoto(true);
-    
-    // Generación de nombre aleatorio y simulación de cámara
-    setTimeout(() => {
-      const extension = newEvidenceType === 'hse' || newEvidenceType === 'quality' ? 'jpg' : 'png';
-      const fileNames = {
-        before: [`antes_bloqueo_${selectedOt.codigo}.png`, `antes_limpieza_${selectedOt.codigo}.png`],
-        during: [`durante_medicion_${selectedOt.codigo}.png`, `durante_torque_${selectedOt.codigo}.png`],
-        after: [`despues_reparado_${selectedOt.codigo}.png`, `despues_operando_${selectedOt.codigo}.png`],
-        hse: [`ast_campo_${selectedOt.codigo}.jpg`, `epp_terreno_${selectedOt.codigo}.jpg`],
-        quality: [`termino_calidad_${selectedOt.codigo}.jpg`, `torque_celda_${selectedOt.codigo}.jpg`],
-        spare: [`repuesto_instalado_${selectedOt.codigo}.png`],
-        tool: [`herramientas_utilizadas_${selectedOt.codigo}.png`],
-        close: [`acta_conforme_${selectedOt.codigo}.png`]
-      };
-
-      const bucket = fileNames[newEvidenceType as keyof typeof fileNames] || fileNames.during;
-      const randomFile = bucket[Math.floor(Math.random() * bucket.length)];
-
+    try {
+      const uploaded = await uploadPhoto(selectedOt.codigo, file);
       const newEvidence: OTEvidencePackItem = {
         evidenceId: `EV-PK-${Date.now()}`,
         otId: selectedOt.codigo,
         type: newEvidenceType,
         label: newEvidenceLabel,
-        description: newEvidenceDesc || 'Cargado mediante visor móvil de terreno.',
-        simulatedFileName: randomFile,
+        description: newEvidenceDesc || 'Foto tomada en terreno.',
+        simulatedFileName: file.name || `${uploaded.id}.jpg`,
         uploadedBy: activeUserName,
         uploadedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        status: 'Completado'
+        status: 'Completado',
+        fileId: uploaded.id,
+        fileUrl: uploaded.url
       };
 
-      const updatedEvidencePack = [...tempEvidenceList, newEvidence];
+      // La subida puede tardar: se usa la versión más reciente de la OT y de la lista (no la del momento del clic)
+      const latestOts = otsLatestRef.current;
+      const latestOt = latestOts.find(o => o.codigo === selectedOt.codigo) ?? selectedOt;
+      const updatedEvidencePack = [...(latestOt.evidencePack || tempEvidenceList), newEvidence];
       setTempEvidenceList(updatedEvidencePack);
 
       const updatedOT: OT = {
-        ...selectedOt,
+        ...latestOt,
         evidencePack: updatedEvidencePack,
         evidencias: updatedEvidencePack.map(e => ({
-          url: 'captured_field_snapshot.png',
+          url: e.fileUrl || '',
           nombreArchivo: e.simulatedFileName,
           descripcion: e.label + ': ' + e.description,
           fecha: e.uploadedAt.substring(0, 10)
         }))
       };
 
-      const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
+      const index = latestOts.findIndex((o) => o.codigo === selectedOt.codigo);
       if (index !== -1) {
-        const copy = [...ots];
+        const copy = [...latestOts];
         copy[index] = updatedOT;
         onUpdateOts(copy);
         setSelectedOt(updatedOT);
       }
 
       saveEvidencePackToDB(newEvidence);
-      logFieldExecution(selectedOt.codigo, 'Evidence', `Evidencia de tipo ${newEvidenceType} agregada: ${newEvidenceLabel} (${randomFile})`);
-
+      logFieldExecution(selectedOt.codigo, 'Evidence', `Evidencia de tipo ${newEvidenceType} agregada: ${newEvidenceLabel}`);
       onAddAuditLog(
         'Evidencia Fotográfica Terreno',
         'Field Ops Mobile',
         selectedOt.codigo,
         selectedOt.plantaNombre,
-        `Se adjuntó evidencia de tipo "${newEvidenceType}": ${newEvidence.simulatedFileName} (${newEvidence.label})`,
+        `Se adjuntó foto de tipo "${newEvidenceType}": ${newEvidence.label}`,
         'Baja'
       );
-
       setNewEvidenceLabel('');
       setNewEvidenceDesc('');
+      triggerSuccess('¡Foto subida y guardada en la OT!');
+    } catch (error) {
+      alert(`No se pudo subir la foto: ${(error as Error).message}. Revisa la señal e intenta de nuevo.`);
+    } finally {
       setSimulatingPhoto(false);
-      triggerSuccess('¡Fotografía de evidencia simulada y sincronizada correctamente!');
-    }, 1500);
+    }
   };
 
   const handleDeleteEvidence = (evidenceId: string) => {
@@ -757,7 +749,7 @@ export default function VistaTerreno({
       ...selectedOt,
       evidencePack: filtered,
       evidencias: filtered.map(e => ({
-        url: 'captured_field_snapshot.png',
+        url: e.fileUrl || '',
         nombreArchivo: e.simulatedFileName,
         descripcion: e.label + ': ' + e.description,
         fecha: e.uploadedAt.substring(0, 10)
@@ -1589,7 +1581,8 @@ export default function VistaTerreno({
                           <p className="text-[9px] text-slate-400">{selectedOt.plantaNombre}</p>
                         </div>
 
-                        {/* SELECTOR MOCK DE TIPO DE OT (MODO PRUEBA - REGLA 8) */}
+                        {/* SELECTOR MOCK DE TIPO DE OT (MODO PRUEBA - REGLA 8). 17A: solo Super Admin; cambia datos reales de la OT */}
+                        {userRole === 'SUPER_ADMIN_ORBI' && (
                         <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl space-y-1.5">
                           <div className="flex items-center gap-1.5 text-[9px] font-mono font-bold text-amber-400">
                             <span className="animate-pulse">🧪</span>
@@ -1612,6 +1605,7 @@ export default function VistaTerreno({
                             <option value="loto_hse">🛡️ OT con LOTO / HSE (Permisos + Firmas + Validaciones)</option>
                           </select>
                         </div>
+                        )}
 
                         {selectedOt.estado === 'Devuelta a ejecución' && (
                           <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-[10px] text-rose-300 font-mono space-y-1.5">
@@ -1919,7 +1913,12 @@ export default function VistaTerreno({
                                 <span className="text-[9px] text-slate-500 uppercase block font-bold">Fotos Cargadas Sincronizadas ({tempEvidenceList.length})</span>
                                 {tempEvidenceList.map((ev) => (
                                   <div key={ev.evidenceId} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-900">
-                                    <div className="truncate pr-2">
+                                    <div className="truncate pr-2 flex items-center gap-1.5">
+                                      {ev.fileUrl && (
+                                        <a href={ev.fileUrl} target="_blank" rel="noopener noreferrer">
+                                          <img src={ev.fileUrl} alt={ev.label} className="h-8 w-8 object-cover rounded" loading="lazy" />
+                                        </a>
+                                      )}
                                       <span className="text-[8px] bg-indigo-500/15 text-indigo-400 px-1 rounded uppercase font-bold mr-1">{ev.type}</span>
                                       <span className="text-slate-300 font-bold">{ev.label}</span>
                                     </div>
@@ -1968,23 +1967,33 @@ export default function VistaTerreno({
                                 />
                               </div>
 
-                              <button
-                                onClick={handleUploadSimulatedPhoto}
-                                disabled={simulatingPhoto}
-                                className="w-full py-1.5 bg-indigo-500/10 hover:bg-indigo-500 hover:text-slate-950 font-mono text-[11px] font-bold rounded border border-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors"
+                              <label
+                                className={`w-full py-1.5 bg-indigo-500/10 hover:bg-indigo-500 hover:text-slate-950 font-mono text-[11px] font-bold rounded border border-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors ${simulatingPhoto ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
                               >
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  className="hidden"
+                                  disabled={simulatingPhoto}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    e.target.value = '';
+                                    void handleUploadPhoto(file);
+                                  }}
+                                />
                                 {simulatingPhoto ? (
                                   <>
                                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                    Sincronizando foto...
+                                    Subiendo foto...
                                   </>
                                 ) : (
                                   <>
                                     <Camera className="h-3.5 w-3.5" />
-                                    Agregar Evidencia (Capturar)
+                                    Tomar o elegir foto
                                   </>
                                 )}
-                              </button>
+                              </label>
                             </div>
 
                             {/* MENSAJE DE COMPLEMENTO DE ACTIVO */}
@@ -1995,30 +2004,7 @@ export default function VistaTerreno({
                               </div>
                             )}
 
-                            {/* BOTÓN MARCAR ACTIVO COMPLETO (REGLA 7) */}
-                            <button
-                              onClick={() => {
-                                // Simular marcado de activo completo
-                                const newId = `EV-TECH-${Date.now().toString().slice(-4)}`;
-                                const completedEvidence: OTEvidencePackItem = {
-                                  evidenceId: newId,
-                                  otId: selectedOt.codigo,
-                                  type: 'after',
-                                  label: `Después - Limpieza ${selectedOt.activo.includes('INV-') ? selectedOt.activo.substring(selectedOt.activo.indexOf('INV-'), selectedOt.activo.indexOf('INV-') + 6) : 'Activo General'}`,
-                                  description: 'Soplado, limpieza interna e inspección final de orden y aseo completados de forma conforme.',
-                                  simulatedFileName: 'inv_tech_after_complete.jpg',
-                                  uploadedBy: 'Víctor León',
-                                  uploadedAt: '2026-07-06 17:30',
-                                  status: 'Cargada'
-                                };
-                                setTempEvidenceList(prev => [...prev, completedEvidence]);
-                                setActivoCompletadoMsg(`✓ El activo ${selectedOt.activo.includes('INV-') ? selectedOt.activo.substring(selectedOt.activo.indexOf('INV-'), selectedOt.activo.indexOf('INV-') + 6) : 'actual'} ha sido marcado como COMPLETADO en terreno.`);
-                                setTimeout(() => setActivoCompletadoMsg(null), 5000);
-                              }}
-                              className="w-full py-2 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/35 hover:to-teal-500/35 text-emerald-400 hover:text-white font-mono text-xs font-black rounded-xl border border-emerald-500/30 hover:border-emerald-500/50 flex items-center justify-center gap-1.5 transition-all shadow-md"
-                            >
-                              <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Marcar activo completo
-                            </button>
+                            {/* 17A: se quitó "marcar activo completo", que creaba evidencias sin foto real */}
 
                             <button
                               onClick={() => setExecutionStep(5)}

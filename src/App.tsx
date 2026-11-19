@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Layers,
   Users,
@@ -82,6 +82,11 @@ import {
 } from './data/db';
 import { STORAGE_ERROR_EVENT } from './data/storage';
 import ErrorBoundary from './components/ErrorBoundary';
+import LoginScreen from './components/LoginScreen';
+import {
+  getSession, logout, bootstrapCollections, pollCollections, fetchOTs, fetchAudit, postAudit, initOutbox, processOutbox,
+  queueOTChanges, hasPendingOT, setServerOTListener, clearLocalMirrorAndReload, ApiError, SYNC_EVENTS, type SessionInfo,
+} from './data/serverSync';
 
 // Importar Vistas Operacionales
 import HomeEjecutivo from './components/HomeEjecutivo';
@@ -146,36 +151,128 @@ export default function App() {
     return () => window.removeEventListener(STORAGE_ERROR_EVENT, onStorageError);
   }, []);
 
-  // 1. Inicialización y carga de bases de datos persistentes
-  useEffect(() => {
+  // 17A Fase 1: sesión real y datos compartidos desde el servidor
+  const [authState, setAuthState] = useState<'loading' | 'login' | 'change-password' | 'offline' | 'ready'>('loading');
+  const [pendingSync, setPendingSync] = useState<number>(0);
+  const otsRef = useRef<OT[]>([]);
+  useEffect(() => { otsRef.current = ots; }, [ots]);
+
+  const loadLocalCollections = () => {
     setOrganigrama(loadOrganigrama());
     setPlantas(loadPlantas());
-    setOts(loadOTs());
     setFindings(loadHSECalidad());
     setPlanificacion(loadPlanificacion());
-
-    // Carga de nuevas tablas v0.1.1C
     setVehiculos(loadVehiculos());
     setRecursosPersonas(loadRecursosPersonas());
     setRepuestos(loadRepuestos());
     setHerramientas(loadHerramientas());
-    setAuditLogs(loadAuditLog());
     setEscalaciones(loadEscalaciones());
     setPtws(loadPtws());
+  };
 
-    const savedRole = getActiveRole();
-    setUserRole(savedRole);
-    setUserName(getActiveUserName());
+  const startSession = async (session?: SessionInfo) => {
+    try {
+      const info = session ?? await getSession();
+      if (info.mustChangePassword) {
+        setAuthState('change-password');
+        return;
+      }
+      setUserRole(info.user.role);
+      setUserName(info.user.displayName);
+      initOutbox();
+      await bootstrapCollections();
+      loadLocalCollections();
+      const serverOts = await fetchOTs();
+      // Las OTs con cambios aún sin enviar conservan la versión local
+      setOts(prev => {
+        const serverCodes = new Set(serverOts.map(o => o.codigo));
+        const merged = serverOts.map(o => (hasPendingOT(o.codigo) ? prev.find(p => p.codigo === o.codigo) ?? o : o));
+        return [...merged, ...prev.filter(p => !serverCodes.has(p.codigo) && hasPendingOT(p.codigo))];
+      });
+      setAuditLogs(await fetchAudit());
+      const suggested = ROLES_CONFIG[info.user.role]?.suggestedView;
+      if (suggested) setActiveView(suggested);
+      setAuthState('ready');
+      void processOutbox();
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.body?.code === 'MUST_CHANGE_PASSWORD')) {
+        setAuthState(error.status === 401 ? 'login' : 'change-password');
+      } else {
+        setAuthState('offline');
+      }
+    }
+  };
+
+  useEffect(() => {
+    setServerOTListener((serverOt) => {
+      setOts(prev => (prev.some(o => o.codigo === serverOt.codigo)
+        ? prev.map(o => (o.codigo === serverOt.codigo ? serverOt : o))
+        : [...prev, serverOt]));
+    });
+    const onAuth = () => setAuthState('login');
+    const onPending = (e: Event) => setPendingSync(Number((e as CustomEvent<number>).detail) || 0);
+    const onCollections = () => loadLocalCollections();
+    window.addEventListener(SYNC_EVENTS.AUTH_REQUIRED, onAuth);
+    window.addEventListener(SYNC_EVENTS.PENDING_CHANGED, onPending);
+    window.addEventListener(SYNC_EVENTS.COLLECTIONS_UPDATED, onCollections);
+    void startSession();
 
     // Hora de sistema formateada
-    const updateTime = () => {
-      const now = new Date();
-      setSystemTime(now.toLocaleString('es-CL', { hour12: false }));
-    };
+    const updateTime = () => setSystemTime(new Date().toLocaleString('es-CL', { hour12: false }));
     updateTime();
     const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(SYNC_EVENTS.AUTH_REQUIRED, onAuth);
+      window.removeEventListener(SYNC_EVENTS.PENDING_CHANGED, onPending);
+      window.removeEventListener(SYNC_EVENTS.COLLECTIONS_UPDATED, onCollections);
+    };
   }, []);
+
+  // Traer cambios de otros usuarios cada 20 s, al volver a la pestaña y al recuperar señal
+  useEffect(() => {
+    if (authState !== 'ready') return;
+    const refresh = async () => {
+      try {
+        await processOutbox();
+        const serverOts = await fetchOTs();
+        setOts(prev => {
+          const byCode = new Map<string, OT>(prev.map(o => [o.codigo, o]));
+          const serverCodes = new Set(serverOts.map(o => o.codigo));
+          const merged = serverOts.map(o => {
+            const local = byCode.get(o.codigo);
+            if (local && hasPendingOT(o.codigo)) return local;
+            // misma versión o la local es más nueva (respuesta llegó antes que esta lectura): se conserva
+            if (local && typeof local._version === 'number' && typeof o._version === 'number' && local._version >= o._version) return local;
+            return o;
+          });
+          // OTs creadas en este equipo que aún no llegan al servidor
+          const localOnly = prev.filter(p => !serverCodes.has(p.codigo) && hasPendingOT(p.codigo));
+          return [...merged, ...localOnly];
+        });
+        await pollCollections();
+      } catch {
+        /* sin señal: se reintenta en el próximo ciclo */
+      }
+    };
+    const timer = setInterval(refresh, 20_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [authState]);
+
+  const handleLogout = async () => {
+    if (pendingSync > 0 && !window.confirm(`Hay ${pendingSync} cambio(s) sin sincronizar. Si cierras sesión ahora quedarán en este equipo hasta que vuelvas a entrar. ¿Cerrar sesión?`)) return;
+    try { await logout(); } catch { /* igual se cierra localmente */ }
+    window.location.reload();
+  };
 
   // Helper para registro inmutable en ORBI Audit Log
   const addAuditLogEvent = (
@@ -197,12 +294,9 @@ export default function App() {
       comentario: comentario || '',
       criticidad
     };
-    // 17A: actualización funcional para no perder eventos registrados en el mismo ciclo
-    setAuditLogs(prev => {
-      const updated = [newEvent, ...prev];
-      saveAuditLog(updated);
-      return updated;
-    });
+    // 17A: actualización funcional; el servidor registra el usuario real de la sesión
+    setAuditLogs(prev => [newEvent, ...prev]);
+    postAudit({ accion, modulo, otCodigo: otCode, planta: plantaName, comentario, criticidad });
   };
 
   // 2. Sincronización automática de bases de datos reactivas con localStorage
@@ -217,8 +311,10 @@ export default function App() {
   };
 
   const handleUpdateOts = (updated: OT[]) => {
+    // 17A: se envían al servidor solo los campos cambiados de cada OT modificada
+    queueOTChanges(otsRef.current, updated);
+    otsRef.current = updated;
     setOts(updated);
-    saveOTs(updated);
   };
 
   const handleUpdateFindings = (updated: HSEFinding[]) => {
@@ -259,29 +355,6 @@ export default function App() {
   const handleUpdatePtws = (updated: PTW[]) => {
     setPtws(updated);
     savePtws(updated);
-  };
-
-  // Cambio de identidad (Role Switcher)
-  const handleRoleChange = (roleId: RoleType) => {
-    saveActiveRole(roleId);
-    setUserRole(roleId);
-    
-    // Buscar nombre del rol en organigrama
-    const org = loadOrganigrama();
-    const match = org.find(u => u.role === roleId);
-    if (match) {
-      setUserName(match.name);
-    } else {
-      setUserName('Usuario Demostración');
-    }
-
-    // Redireccionar a vista sugerida por el rol
-    const rConfig = ROLES_CONFIG[roleId];
-    if (rConfig && rConfig.suggestedView) {
-      setActiveView(rConfig.suggestedView);
-    }
-
-    setIsRoleDropdownOpen(false);
   };
 
   // Rutas profundas (Deep Linking) con filtros
@@ -339,6 +412,21 @@ export default function App() {
     }
   ];
 
+  if (authState === 'loading') {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">Conectando con el servidor…</div>;
+  }
+  if (authState === 'login' || authState === 'change-password') {
+    return <LoginScreen mode={authState} onDone={(session) => { setAuthState('loading'); void startSession(session); }} />;
+  }
+  if (authState === 'offline') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-300 text-sm p-6 text-center">
+        <p>No se pudo conectar con el servidor de ORBI. Revisa la señal e intenta de nuevo.</p>
+        <button className="px-4 py-2 rounded-lg bg-emerald-500 text-slate-950 font-bold" onClick={() => { setAuthState('loading'); void startSession(); }}>Reintentar</button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
       
@@ -383,51 +471,31 @@ export default function App() {
                 <div className="text-[9px] text-slate-500 leading-none">IDENTIDAD ACTIVA</div>
                 <div className="text-xs font-bold text-white truncate max-w-[120px]">{userName}</div>
               </div>
+              {pendingSync > 0 && (
+                <span title="Cambios pendientes de sincronizar" className="text-[10px] font-bold bg-amber-500 text-slate-950 rounded-full px-1.5">
+                  {pendingSync} sin sincronizar
+                </span>
+              )}
               <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
             </button>
 
             {isRoleDropdownOpen && (
               <div className="absolute right-0 mt-2 w-72 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-2 z-50 max-h-[80vh] overflow-y-auto">
-                <div className="px-4 py-2 border-b border-slate-800">
-                  <h4 className="text-xs font-bold text-white">Simulador de Roles O&M</h4>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Permite validar vistas sugeridas y permisos visuales.</p>
+                <div className="px-4 py-3 border-b border-slate-800">
+                  <h4 className="text-xs font-bold text-white">{userName}</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{ROLES_CONFIG[userRole]?.title || userRole}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    {pendingSync > 0 ? `${pendingSync} cambio(s) pendientes de sincronizar` : 'Todo sincronizado con el servidor'}
+                  </p>
                 </div>
-
-                {Object.keys(ROLES_CONFIG).map((rk) => {
-                  const roleConfig = ROLES_CONFIG[rk];
-                  const isCurrent = userRole === rk;
-                  return (
-                    <button
-                      key={rk}
-                      onClick={() => handleRoleChange(rk as RoleType)}
-                      className={`w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-slate-950 transition-colors ${
-                        isCurrent ? 'bg-slate-950/60' : ''
-                      }`}
-                    >
-                      <div>
-                        <div className="text-xs font-bold text-slate-200">{roleConfig.title}</div>
-                        <div className="text-[10px] text-slate-500 truncate max-w-[190px]">{roleConfig.scope}</div>
-                      </div>
-                      {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>}
-                    </button>
-                  );
-                })}
-
-                {['SUPER_ADMIN_ORBI', 'JEFE_OM'].includes(userRole) && (
-                <div className="p-2 border-t border-slate-800 mt-2">
+                <div className="p-2">
                   <button
-                    onClick={() => {
-                      // 17A: doble confirmación; solo Super Admin y Jefe O&M
-                      if (!window.confirm('¿Borrar TODOS los datos locales (OTs, inventario, PTW, auditoría) y volver a los datos de ejemplo?')) return;
-                      if (!window.confirm('Esta acción no se puede deshacer. ¿Confirmas el borrado total?')) return;
-                      resetAllDatabases();
-                    }}
-                    className="w-full py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 text-xs font-bold font-mono rounded-lg transition-colors flex items-center justify-center gap-1"
+                    onClick={handleLogout}
+                    className="w-full py-2 bg-slate-950 hover:bg-slate-800 text-slate-200 text-xs font-bold rounded-lg transition-colors"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" /> Resetear Base Simulada
+                    Cerrar sesión
                   </button>
                 </div>
-                )}
               </div>
             )}
           </div>
@@ -798,13 +866,12 @@ export default function App() {
                 {['SUPER_ADMIN_ORBI', 'JEFE_OM'].includes(userRole) ? (
                 <button
                   onClick={() => {
-                    if (!window.confirm('¿Borrar TODOS los datos locales y volver a los datos de ejemplo?')) return;
-                    if (!window.confirm('Esta acción no se puede deshacer. ¿Confirmas el borrado total?')) return;
-                    resetAllDatabases();
+                    if (!window.confirm('¿Borrar la copia local de este navegador y volver a descargar todo desde el servidor? Los datos del servidor no se modifican.')) return;
+                    clearLocalMirrorAndReload();
                   }}
                   className="px-4 py-2 bg-rose-500 text-slate-950 text-xs font-bold font-mono rounded-lg hover:bg-rose-400 transition-colors flex items-center gap-1.5"
                 >
-                  <RefreshCw className="h-4 w-4" /> Resetear Base Simulada de Datos
+                  <RefreshCw className="h-4 w-4" /> Recargar datos desde el servidor
                 </button>
                 ) : (
                   <p className="text-xs text-amber-400 font-mono">Solo Super Admin o Jefe O&amp;M pueden restablecer la base de datos.</p>

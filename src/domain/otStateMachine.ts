@@ -223,7 +223,7 @@ export function transitionOT(
       { estadoAnterior: from, estadoNuevo: to, fecha: now, usuario: ctx.usuario, comentario },
     ],
     historialCambios: [
-      ...(ot.historialCambios || []),
+      ...(candidate.historialCambios || []),
       { fecha: now, usuario: ctx.usuario, accion: 'Transición Estado', detalle: `${from} → ${to}. ${comentario}` },
     ],
   };

@@ -219,6 +219,8 @@ export interface OTHistorial {
 
 export interface OT {
   codigo: string;
+  /** 17A: versión del servidor en que se basa esta copia (la escribe el servidor). */
+  _version?: number;
   plantaId: string;
   plantaNombre: string;
   legacyPlantId?: string;
@@ -355,6 +357,9 @@ export interface OTEvidencePackItem {
   uploadedAt: string;
   status: 'Pendiente' | 'Cargada' | 'Incompleta' | 'Requiere revisión' | 'Aprobada' | 'Rechazada' | 'Completado';
   linkedChecklistItem?: string;
+  /** 17A: foto real subida al servidor. */
+  fileId?: string;
+  fileUrl?: string;
 }
 
 export interface HSEFindingType {

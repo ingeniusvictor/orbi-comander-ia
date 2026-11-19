@@ -8,7 +8,7 @@ This file contains custom instructions, architecture guidelines, and the version
 **Current Version:** `ORBI OT Center v0.X / … / MÓDULO 16B.1F (base congelada) → MÓDULO 17A — PILOTO FUNCIONAL (EN DESARROLLO)`  
 **Status:** **MÓDULO 17A ABIERTO** — Autorizado por el dueño del producto (2026-11-19) para convertir la demo en un piloto funcional. Los congelamientos 13A–16B quedan levantados **solo** para los cambios del plan 17A descritos en la sección "MÓDULO 17A" más abajo.  
 **Runtime:** React 18+ (Vite) | TypeScript | Tailwind CSS | Recharts & Lucide Icons  
-**State Engine:** Client-side LocalStorage Persistence with fully synchronized mock systems.
+**State Engine:** (17A Fase 1) Servidor Express + SQLite como fuente de verdad; localStorage queda como copia local y cola de cambios pendientes.
 
 ---
 
@@ -472,7 +472,14 @@ Before approving any subsequent build or turn, verify the following 12 test path
     - Carga/guardado con respaldo de datos dañados y aviso visible (`orbi:storage-error`).
     - `ErrorBoundary` contra pantallas en blanco; reset con doble confirmación solo para Super Admin y Jefe O&M; Report Center restringido por rol.
     - Pruebas `tests/otStateMachine.test.ts` incluidas en `npm test`.
-  - **Fase 1 — Servidor y usuarios:** base de datos en servidor, inicio de sesión real con roles, almacenamiento real de fotos.
+  - **Fase 1 — Servidor y usuarios (HECHA en esta rama):**
+    - Servidor Express con SQLite integrado (`node:sqlite`, Node 24+), carpeta `ORBI_DATA_DIR`. Código en `server/` (db, auth, otSync, routes, repo, collections, cli).
+    - Inicio de sesión real (scrypt, cookie httpOnly, cambio obligatorio de contraseña). El rol sale de la sesión; se eliminó el selector de roles.
+    - El servidor revalida cada cambio de OT: guardado por campo con detección de conflictos, transiciones con `transitionOT` y el usuario real, técnicos limitados a sus OTs, firmas y validaciones por rol, evidencias con foto real.
+    - Colecciones compartidas en el servidor (inventario, movimientos, PTW, escalamientos, HSE, planificación, plantas...) reflejadas en localStorage (`src/data/serverSync.ts`).
+    - Cola persistente de cambios pendientes con reintento; fotos reales reducidas a 1600 px.
+    - Respaldos automáticos diarios; datos demo solo con `ORBI_SEED_DEMO=true`. Guía: `docs/PILOTO_DESPLIEGUE.md`.
+    - **Regla para agentes:** ningún módulo debe escribir el estado de una OT ni campos de firma/validación sin pasar por el servidor; los usuarios se administran con `npm run user`.
   - **Fase 2 — Entidades CMMS:** activos con jerarquía, plantillas de checklist, planes preventivos que generan OTs, líneas de HH por técnico, códigos de espera y de falla.
   - **Fase 3 — Terreno:** checklist con foto por pregunta y modo sin conexión con sincronización.
   - **Fase 4 — Prueba de punta a punta:** preventivo anual de inversores en Cantillana y un correctivo, de creación a cierre.

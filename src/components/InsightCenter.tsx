@@ -260,7 +260,7 @@ export default function InsightCenter({
     try {
       const response = await fetch('/api/bi/reporte-ia', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-ORBI-Request': '1' },
         body: JSON.stringify({
           prompt,
           contextData: {
@@ -307,7 +307,7 @@ export default function InsightCenter({
     try {
       const response = await fetch('/api/bi/reporte-ia', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-ORBI-Request': '1' },
         body: JSON.stringify({
           prompt: customQuestion,
           contextData: {

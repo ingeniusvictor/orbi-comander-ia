@@ -6,13 +6,15 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild server/cli.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/cli.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "validate:data": "tsx src/data/validateData.ts",
-    "test": "node tests/run-all.mjs && tsx --test tests/otStateMachine.test.ts",
-    "verify": "npm run lint && npm run validate:data && npm test"
+    "test": "node tests/run-all.mjs && tsx --test tests/otStateMachine.test.ts tests/server.test.ts",
+    "verify": "npm run lint && npm run validate:data && npm test",
+    "user": "tsx server/cli.ts",
+    "user:prod": "node dist/cli.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -38,5 +40,8 @@
   },
   "overrides": {
     "rollup": "npm:@rollup/wasm-node"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

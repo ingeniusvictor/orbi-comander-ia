@@ -41,6 +41,7 @@ import {
   loadInventoryMovements, 
   saveInventoryMovements 
 } from '../data/db';
+import { SYNC_EVENTS } from '../data/serverSync';
 
 interface OMInventoryProps {
   ots: OT[];
@@ -118,10 +119,15 @@ export default function OMInventory({
     plantaDestinoId: '' // used for transfers
   });
 
-  // Load inventory on mount
+  // Load inventory on mount y cada vez que llegan cambios de otros usuarios desde el servidor (17A)
   useEffect(() => {
-    setInventory(loadInventory());
-    setMovements(loadInventoryMovements());
+    const reload = () => {
+      setInventory(loadInventory());
+      setMovements(loadInventoryMovements());
+    };
+    reload();
+    window.addEventListener(SYNC_EVENTS.COLLECTIONS_UPDATED, reload);
+    return () => window.removeEventListener(SYNC_EVENTS.COLLECTIONS_UPDATED, reload);
   }, []);
 
   // Sync state back to localStorage

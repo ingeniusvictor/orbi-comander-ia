@@ -52,6 +52,12 @@ export const STORAGE_KEYS = {
 
 export const SCHEMA_VERSION_VALUE = '0.1.2C-closure-approvals-report-pack';
 
+/** 17A Fase 1: la capa de sincronización se registra aquí para subir al servidor cada escritura local. */
+let collectionWriteListener: ((key: string) => void) | null = null;
+export function setCollectionWriteListener(fn: ((key: string) => void) | null): void {
+  collectionWriteListener = fn;
+}
+
 /** Evento que la app escucha para mostrar fallas de almacenamiento al usuario (17A). */
 export const STORAGE_ERROR_EVENT = 'orbi:storage-error';
 
@@ -105,6 +111,7 @@ export function writeStorageCollection<T>(key: string, data: T): boolean {
   }
   try {
     localStorage.setItem(key, JSON.stringify(data));
+    collectionWriteListener?.(key);
     return true;
   } catch (error) {
     notifyStorageError(`No se pudieron guardar los cambios en "${key}" (¿almacenamiento lleno?). Los cambios recientes no quedaron guardados.`);
