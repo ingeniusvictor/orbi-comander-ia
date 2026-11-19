@@ -1348,10 +1348,11 @@ export default function VistaTerreno({
   };
 
   return (
-    <div id="vista-terreno-container" className="min-h-screen bg-slate-950 text-slate-100 p-6 space-y-6">
+    <div id="vista-terreno-container" className="min-h-screen bg-slate-950 text-slate-100 p-0 sm:p-6 space-y-0 sm:space-y-6">
+      {/* 17A Fase 4: en un teléfono real se muestra solo la app de terreno, a pantalla completa */}
       
       {/* CABECERA EXIGIDA */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-5">
+      <div className="hidden sm:flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-5">
         <div>
           <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs uppercase tracking-wider mb-1">
             <Smartphone className="h-4 w-4 animate-pulse" /> Mobile-First Field Application
@@ -1379,19 +1380,19 @@ export default function VistaTerreno({
       </div>
 
       {/* NOTA REQUERIDA */}
-      <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-xl text-xs text-indigo-300 leading-relaxed max-w-full">
+      <div className="hidden sm:block bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-xl text-xs text-indigo-300 leading-relaxed max-w-full">
         <strong>⚠️ Nota de Arquitectura:</strong> En una fase futura este flujo podrá integrarse con ORBI FieldOps / ORBI GEO NEXT para cámara, georreferencia y evidencia avanzada.
       </div>
 
       {/* DISEÑO EN DOS COLUMNAS: CELULAR SIMULADO Y PANEL DE CONTROL */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 sm:gap-8 items-start">
         
         {/* COLUMNA 1: SMARTPHONE SIMULADO (4 COLS) */}
         <div className="lg:col-span-5 xl:col-span-4 flex justify-center">
-          <div className="relative w-full max-w-[360px] bg-slate-950 rounded-[48px] border-[12px] border-slate-900 shadow-2xl overflow-hidden flex flex-col min-h-[690px] border-double ring-1 ring-slate-800">
+          <div className="relative w-full sm:max-w-[360px] bg-slate-950 rounded-none sm:rounded-[48px] border-0 sm:border-[12px] border-slate-900 sm:shadow-2xl overflow-hidden flex flex-col min-h-[calc(100vh-4rem)] sm:min-h-[690px] border-double sm:ring-1 ring-slate-800">
             
             {/* Notch / Cámara frontal */}
-            <div className="absolute top-0 inset-x-0 h-6 bg-slate-900 flex justify-center items-center z-40">
+            <div className="absolute top-0 inset-x-0 h-6 bg-slate-900 hidden sm:flex justify-center items-center z-40">
               <div className="w-24 h-4 bg-black rounded-b-2xl flex items-center justify-around px-4">
                 <div className="w-2 h-2 rounded-full bg-slate-800"></div>
                 <div className="w-10 h-1 bg-slate-800 rounded-full"></div>
@@ -1399,10 +1400,10 @@ export default function VistaTerreno({
             </div>
 
             {/* Pantalla del Celular */}
-            <div className="flex-1 bg-slate-950 text-white flex flex-col pt-6 select-none">
+            <div className="flex-1 bg-slate-950 text-white flex flex-col pt-0 sm:pt-6 select-none">
               
               {/* Status Bar */}
-              <div className="px-4 py-2 flex justify-between items-center text-[10px] font-mono text-slate-500 border-b border-slate-900 bg-slate-900/60 shrink-0">
+              <div className="px-4 py-2 hidden sm:flex justify-between items-center text-[10px] font-mono text-slate-500 border-b border-slate-900 bg-slate-900/60 shrink-0">
                 <div className="flex items-center gap-1">
                   <Clock className="h-3 w-3 text-slate-400" />
                   <span>{new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1447,7 +1448,7 @@ export default function VistaTerreno({
               )}
 
               {/* Contenido Dinámico de la Pantalla */}
-              <div className="flex-1 flex flex-col p-4 overflow-y-auto max-h-[510px]">
+              <div className="flex-1 flex flex-col p-4 overflow-y-auto sm:max-h-[510px]">
                 
                 {/* Alerta de Éxito Flotante */}
                 {successMessage && (
@@ -2000,7 +2001,7 @@ export default function VistaTerreno({
                             {/* FOTOS CARGADAS (REGLA 7) */}
                             {tempEvidenceList.length > 0 && (
                               <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-[10px] max-h-[120px] overflow-y-auto font-mono">
-                                <span className="text-[9px] text-slate-500 uppercase block font-bold">Fotos Cargadas Sincronizadas ({tempEvidenceList.length})</span>
+                                <span className="text-[9px] text-slate-500 uppercase block font-bold">Fotos de la OT ({tempEvidenceList.length}){tempEvidenceList.some(e => isPendingPhoto(e.fileUrl)) ? ' · algunas esperan señal' : ''}</span>
                                 {tempEvidenceList.map((ev) => (
                                   <div key={ev.evidenceId} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-900">
                                     <div className="truncate pr-2 flex items-center gap-1.5">
@@ -2471,7 +2472,7 @@ export default function VistaTerreno({
         </div>
 
         {/* COLUMNA 2: DETALLES, AUDITORÍA DE CAMPO Y PANEL DE COMPLIANCE (8 COLS) */}
-        <div className="lg:col-span-7 xl:col-span-8 space-y-6">
+        <div className="hidden sm:block lg:col-span-7 xl:col-span-8 space-y-6">
           
           {/* Bento-grid de simulación del Dispositivo e Integridad de Datos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

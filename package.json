@@ -11,11 +11,12 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "validate:data": "tsx src/data/validateData.ts",
-    "test": "node tests/run-all.mjs && tsx --test tests/otStateMachine.test.ts tests/server.test.ts tests/cmms.test.ts",
+    "test": "node tests/run-all.mjs && tsx --test tests/otStateMachine.test.ts tests/server.test.ts tests/cmms.test.ts tests/e2e-api.test.ts",
     "verify": "npm run lint && npm run validate:data && npm test",
     "user": "tsx server/cli.ts",
     "user:prod": "node dist/cli.cjs",
-    "serve:prod": "node -e \"process.env.NODE_ENV='production';require('./dist/server.cjs')\""
+    "serve:prod": "node -e \"process.env.NODE_ENV='production';require('./dist/server.cjs')\"",
+    "e2e": "npm run build && playwright test"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -30,6 +31,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",

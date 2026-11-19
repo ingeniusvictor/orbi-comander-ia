@@ -653,7 +653,7 @@ export default function App() {
         </aside>
 
         {/* AREA DE CONTENIDO PRINCIPAL */}
-        <main className="flex-1 p-6 overflow-y-auto max-w-[1600px] mx-auto w-full">
+        <main className={`flex-1 ${activeView === 'Terreno' ? 'p-0' : 'p-3'} sm:p-6 overflow-y-auto max-w-[1600px] mx-auto w-full`}>
           <ErrorBoundary modulo={activeView} resetKey={activeView}>
           {activeView === 'Home' && (
             <HomeEjecutivo

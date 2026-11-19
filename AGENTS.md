@@ -494,7 +494,12 @@ Before approving any subsequent build or turn, verify the following 12 test path
     - Fotos sin señal: se guardan en IndexedDB (`src/data/photoQueue.ts`) con identificador provisorio `local-…`; al volver la conexión se suben primero y se reemplazan en la cola antes de enviar los cambios de la OT.
     - Foto por pregunta del checklist; una pregunta de plantilla marcada "requiere foto" no se da por ejecutada sin su foto (regla en `transitionOT` y validación en el servidor).
     - Probar el modo sin señal con `npm run build` y `npm run serve:prod` (el service worker no se activa en `npm run dev`).
-  - **Fase 4 — Prueba de punta a punta:** preventivo anual de inversores en Cantillana y un correctivo, de creación a cierre.
+  - **Fase 4 — Prueba de punta a punta (HECHA en esta rama):**
+    - `tests/e2e-api.test.ts` (en `npm test`): ciclo preventivo (plan anual 4736 → cierre con 3 firmas) y correctivo (inversor C2, espera de repuesto, consumo de inventario, codificación de falla) con 4 usuarios, más pruebas de aislamiento y permisos.
+    - `tests/e2e/piloto.spec.ts` (`npm run e2e`, Playwright con Microsoft Edge, sin descargar navegadores): técnico en teléfono incluyendo pérdida y recuperación de señal, y Jefe O&M en PC.
+    - Correcciones encontradas: Vista Terreno a pantalla completa en teléfonos; auditoría sin señal en cola.
+    - Guía para gerencia: `docs/GUIA_PRUEBA_PILOTO.md`.
+    - **Regla para agentes:** antes de dar por terminado un cambio que toque OTs, sincronización o Vista Terreno, ejecutar `npm test` y `npm run e2e`.
 - **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 

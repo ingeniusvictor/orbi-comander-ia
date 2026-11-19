@@ -8,4 +8,9 @@ coverage/
 !.env.example
 
 # Fase 1 (piloto)
-data/
+# Solo la carpeta de datos de la raíz (base de datos, fotos, respaldos), no src/data/
+/data/
+
+# Fase 4 (Playwright)
+playwright-report/
+test-results/

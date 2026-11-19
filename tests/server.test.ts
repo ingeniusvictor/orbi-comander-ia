@@ -13,6 +13,7 @@ import type { OT } from '../src/types';
 import { applyOTPatch, prepareNewOT, canSignApproval, type StoredOT } from '../server/otSync';
 
 process.env.ORBI_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'orbi-test-'));
+test.after(() => fs.rmSync(process.env.ORBI_DATA_DIR!, { recursive: true, force: true }));
 
 const { openDb } = await import('../server/db');
 const { createUser, sessionMiddleware, hashPassword, verifyPassword } = await import('../server/auth');
