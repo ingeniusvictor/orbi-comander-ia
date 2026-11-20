@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import {
   Wrench,
   Search,
@@ -110,7 +111,7 @@ export default function RepuestosHerramientas({
 
   const handleCreate = () => {
     if (!newRec.nombre || !newRec.categoria) {
-      alert('Por favor complete el nombre y categoría del recurso.');
+      notify('Por favor complete el nombre y categoría del recurso.');
       return;
     }
 
@@ -598,7 +599,7 @@ export default function RepuestosHerramientas({
                             if (selectEl?.value) {
                               handleActionSimulated('assign', { otCode: selectEl.value, responsable: activeUserName });
                             } else {
-                              alert('Seleccione una OT para asignar el recurso.');
+                              notify('Seleccione una OT para asignar el recurso.');
                             }
                           }}
                           className="px-2.5 bg-indigo-500 hover:bg-indigo-600 text-slate-950 font-bold rounded text-[10px] transition-colors"
@@ -614,7 +615,7 @@ export default function RepuestosHerramientas({
                             if (selectEl?.value) {
                               handleActionSimulated('block', { otCode: selectEl.value });
                             } else {
-                              alert('Seleccione la OT que está siendo bloqueada por falta de este recurso.');
+                              notify('Seleccione la OT que está siendo bloqueada por falta de este recurso.');
                             }
                           }}
                           className="w-full py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[9px] rounded transition-colors text-center font-bold uppercase"

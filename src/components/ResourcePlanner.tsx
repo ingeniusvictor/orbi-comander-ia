@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import { 
   Users, 
   MapPin, 
@@ -118,12 +119,12 @@ export default function ResourcePlanner({
     });
 
     const nextActivity = sortedTodayOts.find(o => 
-      !['Cerrada', 'Finalizada', 'Lista para revisión', 'Ejecutada'].includes(o.estado)
+      !['Cerrada', 'Finalizada', 'Lista para revisión', 'Cancelada'].includes(o.estado)
     );
 
     // Last completed activity (historically complete/executed)
     const lastCompleted = techOts.find(o => 
-      ['Cerrada', 'Finalizada', 'Lista para revisión', 'Ejecutada'].includes(o.estado)
+      ['Cerrada', 'Finalizada', 'Lista para revisión', 'Cancelada'].includes(o.estado)
     );
 
     // Main park based on their active assignments
@@ -628,7 +629,7 @@ export default function ResourcePlanner({
                   <div className="pt-2 border-t border-slate-900 flex justify-between items-center">
                     <span className="text-[9px] font-mono text-emerald-400 italic font-bold">{s.impact}</span>
                     <button 
-                      onClick={() => alert(`Simulación ORBI AI: Recomendación '${s.title}' ha sido enviada como propuesta al coordinador.`)}
+                      onClick={() => notify(`Simulación ORBI AI: Recomendación '${s.title}' ha sido enviada como propuesta al coordinador.`)}
                       className="bg-sky-500 hover:bg-sky-400 text-slate-950 font-black font-mono text-[8px] px-2 py-1 rounded transition-colors uppercase tracking-wider"
                     >
                       {s.actionText}

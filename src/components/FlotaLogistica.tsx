@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import {
   Truck,
   PlusCircle,
@@ -197,7 +198,7 @@ export default function FlotaLogistica({
 
   const handleSaveCreate = () => {
     if (!newVehiculo.patente || !newVehiculo.modelo) {
-      alert('Por favor complete patente y modelo del vehículo.');
+      notify('Por favor complete patente y modelo del vehículo.');
       return;
     }
     const targetPlanta = plantas.find(p => p.id === newVehiculo.plantaDestinoId);

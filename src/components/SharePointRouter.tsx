@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { notify } from './Toaster';
 import {
   FolderSync,
   Folder,
@@ -1699,7 +1700,7 @@ export default function SharePointRouter({
                 </button>
                 <button
                   onClick={() => {
-                    alert('Simulación de descarga de Report Pack PDF exitosa.');
+                    notify('Simulación de descarga de Report Pack PDF exitosa.');
                     setPreviewOt(null);
                   }}
                   className="px-4 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-slate-950 font-black rounded-xl transition-all flex items-center gap-1 shadow-md shadow-indigo-950/40"

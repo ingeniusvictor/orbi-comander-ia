@@ -219,6 +219,43 @@ export interface OTHistorial {
 
 export interface OT {
   codigo: string;
+  /** 17A: versión del servidor en que se basa esta copia (la escribe el servidor). */
+  _version?: number;
+  /** 17A Fase 2: activo del catastro jerárquico. */
+  activoId?: string;
+  /** 17A Fase 2: plan preventivo que generó la OT y su fecha programada. */
+  pmPlanId?: string;
+  pmFecha?: string;
+  /** 17A Fase 2: código del motivo de espera (obligatorio al pasar a un estado de espera). */
+  motivoEsperaCodigo?: string;
+  /** 17A Fase 2: codificación de falla (obligatoria para cerrar correctivas y emergencias). */
+  codigoFalla?: { problema: string; causa: string; accion: string };
+  /** 17A Fase 2: horas hombre por técnico; hhReales es la suma de estas líneas cuando existen. */
+  laborLines?: { id: string; tecnico: string; fecha: string; horaInicio: string; horaFin: string; horas: number; actividad?: string }[];
+  /** 17B: OT donde se encontró la falla que originó este correctivo (lo valida el servidor). */
+  otOrigen?: string;
+  /** 17B: pregunta del checklist y fotos del hallazgo que originó este correctivo. */
+  hallazgoOrigen?: { item?: string; fotos: { fileId: string; url: string }[] };
+  /** 17B: correctivos de seguimiento creados desde esta OT (los registra el servidor). */
+  otsSeguimiento?: string[];
+  /** 17B: quién reportó el hallazgo (lo fija el servidor con el usuario de la sesión). */
+  reportadoPor?: string;
+  /** 17D: alarmas de VCOM que originaron este correctivo (o que se le agregaron por ser del mismo equipo). */
+  alarmasOrigen?: { id: string; systemKey: string; severidad: 'normal' | 'high' | 'critical'; titulo: string; inicio: string; equipo?: string }[];
+  /** 17C: OT importada desde SoftWrench (número, estado de origen y enlace para consultarla allá). */
+  softwrench?: { wonum: string; workorderid?: number; estado: string; enlace?: string; importadoEl: string };
+  /** 17B: fecha objetivo del contrato (preventivos) y último día en que aún se cumple (objetivo + margen). */
+  fechaObjetivo?: string;
+  fechaObjetivoLimite?: string;
+  /** 17B: quién aprobó la OT (salida de "Espera aprobación") y cuándo; lo fija la máquina de estados. */
+  aprobadaPor?: string;
+  fechaAprobacion?: string;
+  /** 17B: el cliente aprobó pagar este trabajo (lo marca coordinación o jefatura). */
+  cobrable?: boolean;
+  /** 17B: respaldo de la aprobación del cliente (n.º de OC, correo, etc.). */
+  cobrableReferencia?: string;
+  /** 17B: quién marcó o quitó "cobrable" y cuándo (lo fija el servidor). */
+  cobrableDetalle?: { por: string; fecha: string };
   plantaId: string;
   plantaNombre: string;
   legacyPlantId?: string;
@@ -251,7 +288,8 @@ export interface OT {
     | 'HSE'
     | 'Calidad'
     | 'Cliente'
-    | 'Preventivo programado';
+    | 'Preventivo programado'
+    | 'Hallazgo en terreno';
   impacto: 'Sin impacto' | 'Bajo' | 'Medio' | 'Alto' | 'Crítico';
   riesgoDisponibilidad: 'No aplica' | 'En observación' | 'Riesgo medio' | 'Riesgo alto' | 'Riesgo crítico';
   historialCambios?: OTHistorial[];
@@ -314,7 +352,7 @@ export interface OT {
   resultadoTerreno?: 'Exitoso' | 'Parcial' | 'No resuelto' | 'Requiere repuesto' | 'Requiere nueva visita' | 'Requiere escalamiento';
   propuestaCierreTerreno?: boolean;
   comentarioPropuestaCierre?: string;
-  checklistExecution?: { item: string; completado: boolean; noAplica?: boolean; observacion?: string; hallazgo?: boolean; evidenciaRequerida?: boolean }[];
+  checklistExecution?: { item: string; completado: boolean; noAplica?: boolean; observacion?: string; hallazgo?: boolean; evidenciaRequerida?: boolean; templateId?: string; fotos?: { fileId: string; url: string }[] }[];
   evidencePack?: OTEvidencePackItem[];
 
   // v0.1.2C Closure, Approvals & Report Pack fields
@@ -355,6 +393,9 @@ export interface OTEvidencePackItem {
   uploadedAt: string;
   status: 'Pendiente' | 'Cargada' | 'Incompleta' | 'Requiere revisión' | 'Aprobada' | 'Rechazada' | 'Completado';
   linkedChecklistItem?: string;
+  /** 17A: foto real subida al servidor. */
+  fileId?: string;
+  fileUrl?: string;
 }
 
 export interface HSEFindingType {
@@ -635,6 +676,8 @@ export type PTWEstado =
 export interface PTW {
   id: string; // e.g. PTS-CANT-2026-089
   codigo: string; // Same as id
+  /** 17E: origen del número: oficial del portal O&M o contador local del servidor. */
+  numeracion?: 'portal' | 'local';
   otCodigos: string[]; // Linked OTs
   tecnicos: string[]; // "Víctor León", "Rodrigo Cisterna", "Carrasco"
   plantaId: string;

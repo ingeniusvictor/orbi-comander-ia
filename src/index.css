@@ -1,10 +1,108 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
+/* 17A UX P0: fuentes empaquetadas con la app (funcionan sin señal; antes venían de Google Fonts)
+   y Space Grotesk para títulos, como exige AGENTS.md. */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Space Grotesk Variable", "Space Grotesk", "Inter Variable", ui-sans-serif, sans-serif;
+
+  /* Tono intermedio usado en 400+ bordes y fondos que Tailwind no trae por defecto */
+  --color-slate-850: oklch(24.4% 0.042 263);
+  --color-zinc-850: oklch(24.2% 0.006 286);
+
+  /* 17A UX P1: los grises de texto secundario se aclaran para cumplir contraste WCAG AA sobre el fondo
+     oscuro (slate-500 pasaba de ~4:1 a ~5,5:1; slate-600 de ~2,5:1 a ~4,5:1). */
+  --color-slate-500: oklch(65% 0.04 257);
+  --color-slate-600: oklch(58% 0.04 257);
 }
+
+/* 17A UX P2: tokens de estado. Se usan como bg-ok, text-danger, border-warn/30, etc.
+   "inline" hace que sigan al Modo sol (que redefine los tonos base dentro de .tema-sol).
+   Regla: un solo acento de marca (esmeralda); el error es siempre rose (no red). */
+@theme inline {
+  --color-accent: var(--color-emerald-400);
+  --color-accent-strong: var(--color-emerald-500);
+  --color-ok: var(--color-emerald-400);
+  --color-warn: var(--color-amber-400);
+  --color-danger: var(--color-rose-400);
+  --color-info: var(--color-sky-400);
+  --color-surface: var(--color-slate-900);
+  --color-surface-raised: var(--color-slate-850);
+  --color-line: var(--color-slate-800);
+  --color-ink: var(--color-white);
+  --color-ink-muted: var(--color-slate-400);
+  --radius-control: 0.625rem;
+  --radius-card: 1rem;
+}
+
+@layer base {
+  h1, h2 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* 17A UX P1: foco visible para teclado (antes 0 estilos de foco) */
+  :focus-visible {
+    outline: 2px solid #fbbf24;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* 17A UX P1: respetar "reducir movimiento" del sistema */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 17A UX P1: "Modo sol" — tema claro de alto contraste para usar el teléfono a pleno sol.
+   Se aplica a Vista Terreno invirtiendo la escala de grises y oscureciendo los acentos;
+   así todas las pantallas del técnico cambian sin reescribir cada componente. */
+.tema-sol {
+  --color-white: #0b1220;
+  --color-slate-950: #ffffff;
+  --color-slate-900: #f1f5f9;
+  --color-slate-850: #e2e8f0;
+  --color-slate-800: #cbd5e1;
+  --color-slate-700: #94a3b8;
+  --color-slate-600: #475569;
+  --color-slate-500: #334155;
+  --color-slate-400: #1e293b;
+  --color-slate-300: #0f172a;
+  --color-slate-200: #0b1220;
+  --color-slate-100: #020617;
+  --color-emerald-300: #047857;
+  --color-emerald-400: #047857;
+  --color-emerald-500: #047857;
+  --color-teal-400: #0f766e;
+  --color-amber-300: #92400e;
+  --color-amber-400: #b45309;
+  --color-amber-500: #b45309;
+  --color-rose-300: #9f1239;
+  --color-rose-400: #be123c;
+  --color-rose-500: #be123c;
+  --color-indigo-300: #3730a3;
+  --color-indigo-400: #4338ca;
+  --color-sky-400: #0369a1;
+  --color-cyan-400: #0e7490;
+  /* Fondos tenues de estado (en oscuro son casi negros; en modo sol, claros) */
+  --color-emerald-950: #d1fae5;
+  --color-emerald-900: #a7f3d0;
+  --color-rose-950: #ffe4e6;
+  --color-red-950: #fee2e2;
+  --color-amber-950: #fef3c7;
+  --color-indigo-950: #e0e7ff;
+  --color-cyan-950: #cffafe;
+  background-color: #ffffff;
+  color: #0b1220;
+}
+/* En modo sol, el texto oscuro sobre botones de acento pasa a blanco */
+.tema-sol .text-slate-950 { color: #ffffff; }
 
 /* Custom scrollbar styling for terminal containers */
 ::-webkit-scrollbar {

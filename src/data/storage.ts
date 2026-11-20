@@ -52,31 +52,58 @@ export const STORAGE_KEYS = {
 
 export const SCHEMA_VERSION_VALUE = '0.1.2C-closure-approvals-report-pack';
 
+/** 17A Fase 1: la capa de sincronización se registra aquí para subir al servidor cada escritura local. */
+let collectionWriteListener: ((key: string) => void) | null = null;
+export function setCollectionWriteListener(fn: ((key: string) => void) | null): void {
+  collectionWriteListener = fn;
+}
+
+/** Evento que la app escucha para mostrar fallas de almacenamiento al usuario (17A). */
+export const STORAGE_ERROR_EVENT = 'orbi:storage-error';
+
+export function notifyStorageError(message: string): void {
+  console.error(`[ORBI Storage] ${message}`);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: message }));
+  }
+}
+
 /**
- * Lee una colección tipada desde localStorage con fallback seguro ante JSON corrupto.
+ * Lee una colección tipada desde localStorage.
+ * Si el JSON está corrupto, guarda una copia de respaldo antes de restaurar el valor base
+ * y avisa al usuario (no se pierde el dato original en silencio).
  */
 export function readStorageCollection<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') {
     return fallback;
   }
-  const raw = localStorage.getItem(key);
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(key);
+  } catch (error) {
+    notifyStorageError(`No se pudo leer "${key}": ${String(error)}`);
+    return fallback;
+  }
   if (raw) {
     try {
       return JSON.parse(raw) as T;
     } catch (error) {
-      console.error(`[ORBI Storage] Error al parsear clave "${key}", restaurando valor base:`, error);
+      const backupKey = `${key}__corrupto_${Date.now()}`;
+      try {
+        localStorage.setItem(backupKey, raw);
+      } catch {
+        /* sin espacio para respaldo: se informa abajo */
+      }
+      notifyStorageError(`Datos dañados en "${key}". Se guardó un respaldo en "${backupKey}" y se restauró el valor base.`);
     }
   }
-  try {
-    localStorage.setItem(key, JSON.stringify(fallback));
-  } catch (error) {
-    console.warn(`[ORBI Storage] No se pudo inicializar clave "${key}" en localStorage:`, error);
-  }
+  writeStorageCollection(key, fallback);
   return fallback;
 }
 
 /**
- * Guarda una colección tipada en localStorage protegiendo contra QuotaExceededError.
+ * Guarda una colección tipada en localStorage. Si falla (p. ej. almacenamiento lleno),
+ * avisa al usuario en vez de fallar en silencio.
  */
 export function writeStorageCollection<T>(key: string, data: T): boolean {
   if (typeof window === 'undefined') {
@@ -84,9 +111,10 @@ export function writeStorageCollection<T>(key: string, data: T): boolean {
   }
   try {
     localStorage.setItem(key, JSON.stringify(data));
+    collectionWriteListener?.(key);
     return true;
   } catch (error) {
-    console.error(`[ORBI Storage] Error al persistir clave "${key}":`, error);
+    notifyStorageError(`No se pudieron guardar los cambios en "${key}" (¿almacenamiento lleno?). Los cambios recientes no quedaron guardados.`);
     return false;
   }
 }
@@ -133,13 +161,27 @@ export function importDatabaseSnapshot(snapshot: OrbiDatabaseSnapshot, reload = 
     throw new Error('Formato de snapshot ORBI inválido.');
   }
 
-  Object.entries(snapshot.collections).forEach(([alias, value]) => {
-    const storageKey = (STORAGE_KEYS as Record<string, string>)[alias];
-    if (storageKey) {
-      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-      localStorage.setItem(storageKey, serialized);
-    }
-  });
+  const previous: Record<string, string | null> = {};
+  try {
+    Object.entries(snapshot.collections).forEach(([alias, value]) => {
+      const storageKey = (STORAGE_KEYS as Record<string, string>)[alias];
+      if (storageKey) {
+        previous[storageKey] = localStorage.getItem(storageKey);
+        const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+        localStorage.setItem(storageKey, serialized);
+      }
+    });
+  } catch (error) {
+    // Revertir lo escrito para no dejar la base a medio importar
+    Object.entries(previous).forEach(([k, v]) => {
+      try {
+        if (v === null) localStorage.removeItem(k);
+        else localStorage.setItem(k, v);
+      } catch { /* mejor esfuerzo */ }
+    });
+    notifyStorageError(`La importación del snapshot falló y se revirtió: ${String(error)}`);
+    return false;
+  }
 
   if (reload) {
     window.location.reload();

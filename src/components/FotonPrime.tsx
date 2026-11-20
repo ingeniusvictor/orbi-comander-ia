@@ -124,7 +124,7 @@ export default function FotonPrime({
         summary: `La operación en terreno reporta actualmente ${otsBloqueadas} bloqueos activos que comprometen el MTTR del portafolio. No obstante, se registra una alta adherencia a la captura del Evidence Pack, registrando ${totalEvidencias} evidencias fotográficas completadas para soporte documental contractual.`,
         insights: [
           `Se registran ${otsBloqueadas} bloqueos activos reportados desde terreno que requieren acción de descarte inmediato por repuestos o herramientas.`,
-          `El equipo de campo ha recopilado e integrado un total de ${totalEvidencias} registros de evidencia fotográfica (antes/durante/después) asegurando el compliance del Evidence Pack en el O&M Command Center.`,
+          `El equipo de campo ha recopilado e integrado un total de ${totalEvidencias} registros de evidencia fotográfica (antes/durante/después) asegurando el compliance del Evidence Pack en ORBI O&M Work Center.`,
           `Existen ${propuestasCierre} propuestas de cierre técnico pendientes de validación final por los Supervisores de Terreno en el panel móvil.`,
           `El avance de checklist consolidado a nivel nacional de las OTs activas alcanza el ${avgChecklistProgress}%, demostrando un avance riguroso en el cumplimiento de tareas.`
         ],
@@ -164,7 +164,7 @@ export default function FotonPrime({
 
       setAnalysisResult({
         title: 'Auditoría Inteligente de Aseguramiento de Calidad y Cierres v0.1.2C',
-        summary: `El O&M Command Center IA procesó la cola de cierres detectando ${otsCerradas} OTs con acreditación formal finalizada. Se observa un volumen de ${otsPendientes} solicitudes en revisión por el staff de supervisión, y un índice de devolución a campo de ${otsDevueltas} órdenes por brechas de evidencia o firma AST.`,
+        summary: `ORBI O&M Work Center procesó la cola de cierres detectando ${otsCerradas} OTs con acreditación formal finalizada. Se observa un volumen de ${otsPendientes} solicitudes en revisión por el staff de supervisión, y un índice de devolución a campo de ${otsDevueltas} órdenes por brechas de evidencia o firma AST.`,
         insights: [
           `Auditoría Documental: Un total de ${otsCerradas} órdenes de trabajo han completado el circuito de 4 validaciones (HSE, Calidad, Supervisor, Coordinador, Jefe O&M).`,
           `Bandeja de Devoluciones: ${otsDevueltas} órdenes se encuentran en estado "Devuelta a ejecución" en terreno. Principal causa detectada: Evidencia fotográfica insuficiente en inversores o firma AST.`,

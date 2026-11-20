@@ -3,12 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { notify } from './Toaster';
 import {
   Smartphone,
   CheckCircle,
   FileText,
   Camera,
+  Sun,
+  Moon,
   Layers,
   MapPin,
   Clock,
@@ -39,7 +42,26 @@ import {
   CheckSquare,
   CheckCircle2
 } from 'lucide-react';
+import Button, { buttonClass } from './ui/Button';
+import HallazgoSeguimiento from './HallazgoSeguimiento';
 import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, Escalation, Repuesto, Herramienta, OMInventoryItem, OMInventoryMovement } from '../types';
+import { transitionOT } from '../domain/otStateMachine';
+import { uploadPhoto } from '../data/serverSync';
+import OTMaintenanceFields from './OTMaintenanceFields';
+import { photoSrc, isPendingPhoto } from '../data/photoQueue';
+import { isOutOfRange } from '../domain/cmms';
+
+/** 17A Fase 2: equivalencia entre el tipo de bloqueo de terreno y el código de espera. */
+const BLOCKER_TO_WAIT_CODE: Record<string, string> = {
+  'Falta de repuesto': 'REPUESTO',
+  'Condición insegura': 'SEGURIDAD',
+  'Clima adverso': 'CLIMA',
+  'Acceso bloqueado': 'CLIENTE',
+  'Falta de herramienta': 'RECURSO',
+  'Sin permiso de trabajo': 'PERMISO',
+  'Equipo no disponible': 'CLIENTE',
+};
+import type { RoleType } from '../types';
 import { loadInventory, saveInventory, loadInventoryMovements, saveInventoryMovements } from '../data/db';
 
 interface VistaTerrenoProps {
@@ -368,7 +390,7 @@ export default function VistaTerreno({
     // Reiniciar paso de ejecución a uno válido
     setExecutionStep(1);
 
-    triggerSuccess(`🧪 Modo de Prueba: Se configuró la OT como "${typeKey.toUpperCase().replace('_', ' ')}"`);
+    triggerSuccess(`Prueba: la OT quedó configurada como "${typeKey.toUpperCase().replace('_', ' ')}"`);
   };
 
   // Determinar si el rol tiene capacidades de supervisor
@@ -503,17 +525,36 @@ export default function VistaTerreno({
   const blockedOts = supervisorOts.filter(o => o.bloqueada || o.estado === 'Bloqueada');
   const pendingEvidenceOts = supervisorOts.filter(o => o.evidencePack && o.evidencePack.some(ev => ev.status === 'Pendiente'));
 
+  // 17A: toda transición de estado pasa por la máquina de estados única
+  const runTransition = (base: OT, desired: OT, comentario: string): OT | null => {
+    const { estado, lifecycleHistory: _lh, historialCambios: _hc, ...patch } = desired;
+    if (estado === base.estado) return { ...base, ...patch };
+    const result = transitionOT(base, estado, {
+      usuario: activeUserName,
+      rol: userRole as RoleType,
+      escalaciones,
+      comentario
+    }, patch);
+    if (result.ok === false) {
+      notify(result.error);
+      return null;
+    }
+    return result.ot;
+  };
+
   // 1. CONFIRMAR LLEGADA A PLANTA
   const handleConfirmArrival = () => {
     if (!selectedOt) return;
     
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
       llegadaConfirmada: true,
       horaLlegadaSimulada: tempHoraLlegada,
       observacionLlegada: tempObsLlegada,
       estado: 'En terreno'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'Llegada confirmada a planta');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -527,7 +568,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Confirmación de Llegada',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Técnico confirma arribo simulado a las ${tempHoraLlegada}. Obs: ${tempObsLlegada}`,
@@ -543,15 +584,15 @@ export default function VistaTerreno({
     if (!selectedOt) return;
 
     if (!tempASTFirmado) {
-      alert('Debe firmar el AST (Análisis Seguro de Trabajo) físicamente/digitalmente para poder continuar.');
+      notify('Debe firmar el AST (Análisis Seguro de Trabajo) físicamente/digitalmente para poder continuar.');
       return;
     }
     if (!tempFirmaEjecutor) {
-      alert('Debe ingresar el nombre para la firma digital del ejecutor.');
+      notify('Debe ingresar el nombre para la firma digital del ejecutor.');
       return;
     }
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
       astFirmado: true,
       firmaEjecutorSimulada: tempFirmaEjecutor,
@@ -561,6 +602,8 @@ export default function VistaTerreno({
       permisoTrabajoNumero: tempPermisoTrabajoNum,
       estado: 'En ejecución'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'AST firmada, inicio de ejecución');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -574,7 +617,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Firma AST & Inicio Ejecución',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `AST firmado por ${tempFirmaEjecutor}. Riesgos: ${tempRiesgos.join(', ') || 'Ninguno detectado'}. Estado cambió a "En ejecución".`,
@@ -597,6 +640,44 @@ export default function VistaTerreno({
     } else if (field === 'hallazgo') {
       copy[index].hallazgo = !copy[index].hallazgo;
     }
+    setTempChecklist(copy);
+  };
+
+  // 17A Fase 2: respuesta numérica o de texto; un valor fuera de rango se marca como hallazgo
+  // 17A Fase 3: foto asociada a una pregunta del checklist (se guarda en el teléfono si no hay señal)
+  const [checklistPhotoBusy, setChecklistPhotoBusy] = useState<number | null>(null);
+  const tempChecklistRef = useRef(tempChecklist);
+  tempChecklistRef.current = tempChecklist;
+  const handleChecklistPhoto = async (index: number, file: File | undefined) => {
+    if (!selectedOt || !file) return;
+    setChecklistPhotoBusy(index);
+    try {
+      const uploaded = await uploadPhoto(selectedOt.codigo, file);
+      // La subida puede tardar: se usa el checklist más reciente (no el del momento del clic)
+      const copy = [...tempChecklistRef.current];
+      copy[index] = { ...copy[index], fotos: [...(copy[index].fotos || []), { fileId: uploaded.id, url: uploaded.url }] };
+      setTempChecklist(copy);
+      // Se guarda de inmediato en la OT para no perder la referencia a la foto
+      const latest = otsLatestRef.current.find(o => o.codigo === selectedOt.codigo) ?? selectedOt;
+      const updated: OT = { ...latest, checklistExecution: copy };
+      setSelectedOt(updated);
+      onUpdateOts(otsLatestRef.current.map(o => (o.codigo === updated.codigo ? updated : o)));
+      triggerSuccess(uploaded.pending ? 'Foto guardada en el teléfono; se subirá al volver la señal.' : 'Foto agregada a la pregunta.');
+    } catch (error) {
+      notify(`No se pudo guardar la foto: ${(error as Error).message}`);
+    } finally {
+      setChecklistPhotoBusy(null);
+    }
+  };
+
+  const handleChecklistValue = (index: number, valor: string) => {
+    const copy = [...tempChecklist];
+    const item = { ...copy[index], valor };
+    item.fueraDeRango = isOutOfRange(item);
+    item.completado = valor.trim() !== '';
+    if (item.completado) item.noAplica = false;
+    if (item.fueraDeRango) item.hallazgo = true;
+    copy[index] = item;
     setTempChecklist(copy);
   };
 
@@ -634,7 +715,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Checklist Actualizado',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Progreso del checklist: ${completedItems}/${totalItems} completados (${progressPercent}% de avance).`,
@@ -645,84 +726,75 @@ export default function VistaTerreno({
     setNextVisibleStep(3);
   };
 
-  // 4. SUBIR EVIDENCIA SIMULADA
-  const handleUploadSimulatedPhoto = () => {
-    if (!selectedOt) return;
+  // 4. SUBIR EVIDENCIA (17A Fase 1: foto real desde la cámara o la galería del teléfono)
+  const otsLatestRef = useRef(ots);
+  otsLatestRef.current = ots;
+  const handleUploadPhoto = async (file: File | undefined) => {
+    if (!selectedOt || !file) return;
     if (!newEvidenceLabel.trim()) {
-      alert('Indique una etiqueta para la evidencia fotográfica (ej: Inversor cerrado, Termografía, etc.)');
+      notify('Indique una etiqueta para la evidencia fotográfica (ej: Inversor cerrado, Termografía, etc.)');
       return;
     }
-
     setSimulatingPhoto(true);
-    
-    // Generación de nombre aleatorio y simulación de cámara
-    setTimeout(() => {
-      const extension = newEvidenceType === 'hse' || newEvidenceType === 'quality' ? 'jpg' : 'png';
-      const fileNames = {
-        before: [`antes_bloqueo_${selectedOt.codigo}.png`, `antes_limpieza_${selectedOt.codigo}.png`],
-        during: [`durante_medicion_${selectedOt.codigo}.png`, `durante_torque_${selectedOt.codigo}.png`],
-        after: [`despues_reparado_${selectedOt.codigo}.png`, `despues_operando_${selectedOt.codigo}.png`],
-        hse: [`ast_campo_${selectedOt.codigo}.jpg`, `epp_terreno_${selectedOt.codigo}.jpg`],
-        quality: [`termino_calidad_${selectedOt.codigo}.jpg`, `torque_celda_${selectedOt.codigo}.jpg`],
-        spare: [`repuesto_instalado_${selectedOt.codigo}.png`],
-        tool: [`herramientas_utilizadas_${selectedOt.codigo}.png`],
-        close: [`acta_conforme_${selectedOt.codigo}.png`]
-      };
-
-      const bucket = fileNames[newEvidenceType as keyof typeof fileNames] || fileNames.during;
-      const randomFile = bucket[Math.floor(Math.random() * bucket.length)];
-
+    try {
+      const uploaded = await uploadPhoto(selectedOt.codigo, file);
       const newEvidence: OTEvidencePackItem = {
         evidenceId: `EV-PK-${Date.now()}`,
         otId: selectedOt.codigo,
         type: newEvidenceType,
         label: newEvidenceLabel,
-        description: newEvidenceDesc || 'Cargado mediante visor móvil de terreno.',
-        simulatedFileName: randomFile,
+        description: newEvidenceDesc || 'Foto tomada en terreno.',
+        simulatedFileName: file.name || `${uploaded.id}.jpg`,
         uploadedBy: activeUserName,
         uploadedAt: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        status: 'Completado'
+        status: 'Completado',
+        fileId: uploaded.id,
+        fileUrl: uploaded.url
       };
 
-      const updatedEvidencePack = [...tempEvidenceList, newEvidence];
+      // La subida puede tardar: se usa la versión más reciente de la OT y de la lista (no la del momento del clic)
+      const latestOts = otsLatestRef.current;
+      const latestOt = latestOts.find(o => o.codigo === selectedOt.codigo) ?? selectedOt;
+      const updatedEvidencePack = [...(latestOt.evidencePack || tempEvidenceList), newEvidence];
       setTempEvidenceList(updatedEvidencePack);
 
       const updatedOT: OT = {
-        ...selectedOt,
+        ...latestOt,
         evidencePack: updatedEvidencePack,
         evidencias: updatedEvidencePack.map(e => ({
-          url: 'captured_field_snapshot.png',
+          url: e.fileUrl || '',
           nombreArchivo: e.simulatedFileName,
           descripcion: e.label + ': ' + e.description,
           fecha: e.uploadedAt.substring(0, 10)
         }))
       };
 
-      const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
+      const index = latestOts.findIndex((o) => o.codigo === selectedOt.codigo);
       if (index !== -1) {
-        const copy = [...ots];
+        const copy = [...latestOts];
         copy[index] = updatedOT;
         onUpdateOts(copy);
         setSelectedOt(updatedOT);
       }
 
       saveEvidencePackToDB(newEvidence);
-      logFieldExecution(selectedOt.codigo, 'Evidence', `Evidencia de tipo ${newEvidenceType} agregada: ${newEvidenceLabel} (${randomFile})`);
-
+      logFieldExecution(selectedOt.codigo, 'Evidence', `Evidencia de tipo ${newEvidenceType} agregada: ${newEvidenceLabel}`);
       onAddAuditLog(
         'Evidencia Fotográfica Terreno',
-        'Field Ops Mobile',
+        'Terreno (móvil)',
         selectedOt.codigo,
         selectedOt.plantaNombre,
-        `Se adjuntó evidencia de tipo "${newEvidenceType}": ${newEvidence.simulatedFileName} (${newEvidence.label})`,
+        `Se adjuntó foto de tipo "${newEvidenceType}": ${newEvidence.label}`,
         'Baja'
       );
-
       setNewEvidenceLabel('');
       setNewEvidenceDesc('');
+      triggerSuccess(uploaded.pending ? 'Sin señal: la foto quedó guardada en el teléfono y se subirá sola al volver la conexión.' : '¡Foto subida y guardada en la OT!');
+    } catch (error) {
+      notify(`No se pudo subir la foto: ${(error as Error).message}. Revisa la señal e intenta de nuevo.`);
+    } finally {
       setSimulatingPhoto(false);
-      triggerSuccess('¡Fotografía de evidencia simulada y sincronizada correctamente!');
-    }, 1500);
+    }
   };
 
   const handleDeleteEvidence = (evidenceId: string) => {
@@ -734,7 +806,7 @@ export default function VistaTerreno({
       ...selectedOt,
       evidencePack: filtered,
       evidencias: filtered.map(e => ({
-        url: 'captured_field_snapshot.png',
+        url: e.fileUrl || '',
         nombreArchivo: e.simulatedFileName,
         descripcion: e.label + ': ' + e.description,
         fecha: e.uploadedAt.substring(0, 10)
@@ -763,7 +835,7 @@ export default function VistaTerreno({
     // Find the item in the active inventory database
     const invItemIndex = currentInventory.findIndex(item => item.codigo === selectedRepuestoId);
     if (invItemIndex === -1) {
-      alert("El repuesto no existe en el catálogo.");
+      notify("El repuesto no existe en el catálogo.");
       return;
     }
     
@@ -771,13 +843,13 @@ export default function VistaTerreno({
     
     // Check if the item belongs to the current plant
     if (invItem.plantaNombre !== selectedOt.plantaNombre) {
-      alert(`Este repuesto corresponde a la planta ${invItem.plantaNombre}, no a ${selectedOt.plantaNombre}.`);
+      notify(`Este repuesto corresponde a la planta ${invItem.plantaNombre}, no a ${selectedOt.plantaNombre}.`);
       return;
     }
 
     // Validate stock
     if (invItem.stockActual < repuestoCantidad) {
-      alert(`Stock insuficiente en esta planta. Stock disponible: ${invItem.stockActual} ${invItem.unidad}.`);
+      notify(`Stock insuficiente en esta planta. Stock disponible: ${invItem.stockActual} ${invItem.unidad}.`);
       return;
     }
 
@@ -918,15 +990,15 @@ export default function VistaTerreno({
   const handleSaveHHAndDiagnosis = () => {
     if (!selectedOt) return;
     if (tempHhReales <= 0) {
-      alert('Debe registrar horas referenciales mayores a 0.');
+      notify('Debe registrar horas referenciales mayores a 0.');
       return;
     }
     if (!tempDiagnosticoFinal.trim()) {
-      alert('Debe ingresar un diagnóstico final técnico de terreno.');
+      notify('Debe ingresar un diagnóstico final técnico de terreno.');
       return;
     }
     if (!tempAccionRealizada.trim()) {
-      alert('Debe ingresar la descripción de la acción realizada.');
+      notify('Debe ingresar la descripción de la acción realizada.');
       return;
     }
 
@@ -951,7 +1023,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'HH & Diagnóstico Terreno',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `HH registradas: ${tempHhReales}. Diagnóstico: ${tempDiagnosticoFinal}.`,
@@ -968,13 +1040,13 @@ export default function VistaTerreno({
 
     // Validar HH registradas (Regla 4)
     if (!selectedOt.hhReales || selectedOt.hhReales <= 0) {
-      alert('Falta registrar horas trabajadas.');
+      notify('Falta registrar horas trabajadas.');
       return;
     }
 
     // Validar diagnóstico final (Regla 4)
     if (!selectedOt.diagnosticoFinalTerreno || !selectedOt.diagnosticoFinalTerreno.trim()) {
-      alert('Falta registrar diagnóstico y acciones realizadas.');
+      notify('Falta registrar diagnóstico y acciones realizadas.');
       return;
     }
 
@@ -982,36 +1054,39 @@ export default function VistaTerreno({
     if (selectedOt.requiereChecklist !== false) {
       const pendingCount = tempChecklist.filter(c => !c.completado && !c.noAplica).length;
       if (pendingCount > 0) {
-        alert(`Falta completar ${pendingCount} actividades.`);
+        notify(`Falta completar ${pendingCount} actividades.`);
         return;
       }
     }
 
     // Validar evidencias adjuntas (Regla 4)
     if (selectedOt.requiereEvidencia !== false && tempEvidenceList.length === 0) {
-      alert('Falta adjuntar evidencia requerida.');
+      notify('Falta adjuntar evidencia requerida.');
       return;
     }
 
     // Validar AST / Permiso firmado (Regla 4)
     if (selectedOt.requiereAST && !selectedOt.astFirmado) {
-      alert('Falta firmar permiso de trabajo / análisis seguro (AST).');
+      notify('Falta firmar permiso de trabajo / análisis seguro (AST).');
       return;
     }
 
     // Validar que no esté bloqueada internamente (Regla 4)
     if (selectedOt.bloqueada) {
-      alert('La orden de trabajo se encuentra bloqueada.');
+      notify('La orden de trabajo se encuentra bloqueada.');
       return;
     }
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
+      checklistExecution: tempChecklist,
       propuestaCierreTerreno: true,
       comentarioPropuestaCierre: comentarioCierre || 'Checklist finalizado sin novedades. Se solicita cierre de la OT en terreno.',
       estado: 'Lista para revisión',
       resultadoTerreno: 'Exitoso'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'Técnico propone cierre en terreno');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -1026,7 +1101,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Propuesta de Cierre',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Técnico solicita revisión final y cierre de la OT. Comentario: ${comentarioCierre || 'N/A'}. Estado: Lista para revisión.`,
@@ -1040,16 +1115,20 @@ export default function VistaTerreno({
   const handleRegisterBlocker = () => {
     if (!selectedOt) return;
     if (!blockerComment.trim()) {
-      alert('Debe justificar el motivo del bloqueo.');
+      notify('Debe justificar el motivo del bloqueo.');
       return;
     }
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...selectedOt,
       bloqueada: true,
       motivoBloqueo: `[${blockerType}] - ${blockerComment}`,
+      // 17A Fase 2: motivo de espera codificado (como en SoftWrench)
+      motivoEsperaCodigo: BLOCKER_TO_WAIT_CODE[blockerType] || 'OTRO',
       estado: 'Bloqueada'
     };
+    const updatedOT = runTransition(selectedOt, desiredOT, 'Bloqueo registrado en terreno');
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === selectedOt.codigo);
     if (index !== -1) {
@@ -1079,7 +1158,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Bloqueo de Terreno Registrado',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Trabajos detenidos por: ${blockerType}. Justificación: ${blockerComment}. OT marcada como Bloqueada.`,
@@ -1089,7 +1168,7 @@ export default function VistaTerreno({
     setShowBlockerModal(false);
     setBlockerComment('');
     setSelectedOt(null);
-    triggerSuccess('¡Bloqueo operativo registrado y escalado al Risk & Escalation Center!');
+    triggerSuccess('¡Bloqueo operativo registrado y escalado al Riesgos y Escalamientos!');
   };
 
   // 8. ACCIONES DE SUPERVISOR DE TERRENO
@@ -1118,7 +1197,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Evidencia Validada',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor valida y aprueba ítem fotográfico de evidencia ${evidenceId}.`,
@@ -1132,7 +1211,7 @@ export default function VistaTerreno({
     const ot = ots.find(o => o.codigo === otCode);
     if (!ot) return;
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...ot,
       propuestaCierreTerreno: false,
       estado: 'En ejecución',
@@ -1148,6 +1227,8 @@ export default function VistaTerreno({
         }
       ]
     };
+    const updatedOT = runTransition(ot, desiredOT, `Devuelta a ejecución por supervisor. Motivo: ${comments || 'sin comentario'}`);
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === otCode);
     if (index !== -1) {
@@ -1158,7 +1239,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'OT Devuelta a Ejecución',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor devuelve OT a terreno. Comentario: ${comments || 'N/A'}.`,
@@ -1172,7 +1253,7 @@ export default function VistaTerreno({
     const ot = ots.find(o => o.codigo === otCode);
     if (!ot) return;
 
-    const updatedOT: OT = {
+    const desiredOT: OT = {
       ...ot,
       propuestaCierreTerreno: false,
       estado: 'Cerrada',
@@ -1197,6 +1278,8 @@ export default function VistaTerreno({
         }
       ]
     };
+    const updatedOT = runTransition(ot, desiredOT, `Cierre aprobado por supervisor de terreno. ${comments || ''}`.trim());
+    if (!updatedOT) return;
 
     const index = ots.findIndex((o) => o.codigo === otCode);
     if (index !== -1) {
@@ -1207,7 +1290,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Cierre Técnico Aprobado',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor aprueba el cierre técnico formal de la OT ${otCode}.`,
@@ -1251,7 +1334,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Escalamiento Jerárquico',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor escala formalmente el control de la OT al Coordinador O&M. Motivo: ${motive || 'N/A'}`,
@@ -1262,6 +1345,27 @@ export default function VistaTerreno({
   };
 
   // Helper de éxito
+  // 17A UX P1: "Modo sol" (tema claro de alto contraste), recordado en este equipo
+  const [modoSol, setModoSol] = useState<boolean>(() => {
+    try { return localStorage.getItem('orbi_tema_sol') === '1'; } catch { return false; }
+  });
+  const toggleModoSol = () => setModoSol(prev => {
+    const next = !prev;
+    try { localStorage.setItem('orbi_tema_sol', next ? '1' : '0'); } catch { /* sin almacenamiento */ }
+    return next;
+  });
+  const BotonModoSol = () => (
+    <button
+      type="button"
+      onClick={toggleModoSol}
+      aria-pressed={modoSol}
+      className="min-h-11 inline-flex items-center gap-1.5 px-3 rounded-lg border border-slate-700 bg-slate-900 text-sm font-semibold text-slate-200"
+    >
+      {modoSol ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
+      {modoSol ? 'Modo oscuro' : 'Modo sol'}
+    </button>
+  );
+
   const triggerSuccess = (msg: string) => {
     setSuccessMessage(msg);
     setTimeout(() => {
@@ -1270,16 +1374,14 @@ export default function VistaTerreno({
   };
 
   return (
-    <div id="vista-terreno-container" className="min-h-screen bg-slate-950 text-slate-100 p-6 space-y-6">
+    <div id="vista-terreno-container" className={`min-h-screen bg-slate-950 text-slate-100 p-0 sm:p-6 space-y-0 sm:space-y-6 ${modoSol ? 'tema-sol' : ''}`}>
+      {/* 17A Fase 4: en un teléfono real se muestra solo la app de terreno, a pantalla completa */}
       
       {/* CABECERA EXIGIDA */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-5">
+      <div className="hidden sm:flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-5">
         <div>
-          <div className="flex items-center gap-2 text-emerald-400 font-mono text-xs uppercase tracking-wider mb-1">
-            <Smartphone className="h-4 w-4 animate-pulse" /> Mobile-First Field Application
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            Vista Terreno — Ejecución Mobile First
+          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <Smartphone className="h-6 w-6 text-emerald-400" /> Vista Terreno
           </h1>
           <p className="text-slate-400 text-sm mt-1">
             Ejecución de OT, checklist, evidencia, HH, AST y cierre técnico desde terreno.
@@ -1287,33 +1389,30 @@ export default function VistaTerreno({
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 font-mono">Usuario:</span>
+            <span className="text-slate-500">Usuario:</span>
             <span className="text-white font-bold">{activeUserName}</span>
           </div>
           <span className="text-slate-700">|</span>
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 font-mono">Rol:</span>
-            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono px-2 py-0.5 rounded text-[10px]">
+            <span className="text-slate-500">Rol:</span>
+            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded text-xs">
               {userRole}
             </span>
           </div>
         </div>
       </div>
 
-      {/* NOTA REQUERIDA */}
-      <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-xl text-xs text-indigo-300 leading-relaxed max-w-full">
-        <strong>⚠️ Nota de Arquitectura:</strong> En una fase futura este flujo podrá integrarse con ORBI FieldOps / ORBI GEO NEXT para cámara, georreferencia y evidencia avanzada.
-      </div>
+      {/* 17A UX P0: se quitó la "Nota de Arquitectura" interna que veía el usuario */}
 
       {/* DISEÑO EN DOS COLUMNAS: CELULAR SIMULADO Y PANEL DE CONTROL */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 sm:gap-8 items-start">
         
         {/* COLUMNA 1: SMARTPHONE SIMULADO (4 COLS) */}
         <div className="lg:col-span-5 xl:col-span-4 flex justify-center">
-          <div className="relative w-full max-w-[360px] bg-slate-950 rounded-[48px] border-[12px] border-slate-900 shadow-2xl overflow-hidden flex flex-col min-h-[690px] border-double ring-1 ring-slate-800">
+          <div className="relative w-full sm:max-w-[360px] bg-slate-950 rounded-none sm:rounded-[48px] border-0 sm:border-[12px] border-slate-900 sm:shadow-2xl overflow-hidden flex flex-col min-h-[calc(100vh-4rem)] sm:min-h-[690px] border-double sm:ring-1 ring-slate-800">
             
             {/* Notch / Cámara frontal */}
-            <div className="absolute top-0 inset-x-0 h-6 bg-slate-900 flex justify-center items-center z-40">
+            <div className="absolute top-0 inset-x-0 h-6 bg-slate-900 hidden sm:flex justify-center items-center z-40">
               <div className="w-24 h-4 bg-black rounded-b-2xl flex items-center justify-around px-4">
                 <div className="w-2 h-2 rounded-full bg-slate-800"></div>
                 <div className="w-10 h-1 bg-slate-800 rounded-full"></div>
@@ -1321,10 +1420,10 @@ export default function VistaTerreno({
             </div>
 
             {/* Pantalla del Celular */}
-            <div className="flex-1 bg-slate-950 text-white flex flex-col pt-6 select-none">
+            <div className="flex-1 bg-slate-950 text-white flex flex-col pt-0 sm:pt-6 select-none">
               
               {/* Status Bar */}
-              <div className="px-4 py-2 flex justify-between items-center text-[10px] font-mono text-slate-500 border-b border-slate-900 bg-slate-900/60 shrink-0">
+              <div className="px-4 py-2 hidden sm:flex justify-between items-center text-xs text-slate-500 border-b border-slate-900 bg-slate-900/60 shrink-0">
                 <div className="flex items-center gap-1">
                   <Clock className="h-3 w-3 text-slate-400" />
                   <span>{new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1347,33 +1446,33 @@ export default function VistaTerreno({
                 <div className="grid grid-cols-2 bg-slate-900/40 border-b border-slate-900 shrink-0">
                   <button
                     onClick={() => { setActiveTab('ejecucion'); setSelectedOt(null); }}
-                    className={`py-2 text-[10px] font-mono font-bold tracking-wider uppercase border-b-2 transition-colors ${
+                    className={`min-h-11 text-sm font-semibold border-b-2 transition-colors ${
                       activeTab === 'ejecucion'
                         ? 'border-emerald-500 text-emerald-400 bg-slate-900/20'
                         : 'border-transparent text-slate-500 hover:text-slate-300'
                     }`}
                   >
-                    ⚙️ Mi Ejecución
+                    Mi ejecución
                   </button>
                   <button
                     onClick={() => { setActiveTab('supervisor'); setSelectedOt(null); }}
-                    className={`py-2 text-[10px] font-mono font-bold tracking-wider uppercase border-b-2 transition-colors ${
+                    className={`min-h-11 text-sm font-semibold border-b-2 transition-colors ${
                       activeTab === 'supervisor'
-                        ? 'border-cyan-500 text-cyan-400 bg-slate-900/20'
+                        ? 'border-emerald-500 text-emerald-400 bg-slate-900/20'
                         : 'border-transparent text-slate-500 hover:text-slate-300'
                     }`}
                   >
-                    🛡️ Panel Supervisor
+                    Supervisión
                   </button>
                 </div>
               )}
 
               {/* Contenido Dinámico de la Pantalla */}
-              <div className="flex-1 flex flex-col p-4 overflow-y-auto max-h-[510px]">
+              <div className="flex-1 flex flex-col p-4 overflow-y-auto sm:max-h-[510px]">
                 
                 {/* Alerta de Éxito Flotante */}
                 {successMessage && (
-                  <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 p-2.5 rounded-lg mb-3 text-[11px] font-mono flex items-start gap-1.5 animate-fade-in shrink-0">
+                  <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 p-2.5 rounded-lg mb-3 text-sm flex items-start gap-1.5 animate-fade-in shrink-0">
                     <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-emerald-400" />
                     <span>{successMessage}</span>
                   </div>
@@ -1387,12 +1486,13 @@ export default function VistaTerreno({
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <div>
-                            <h3 className="text-xs font-mono text-slate-500 uppercase">Bandeja de Terreno</h3>
+                            <h3 className="text-xs text-slate-500">Bandeja de Terreno</h3>
                             <h2 className="text-sm font-bold text-white">Mis OT Asignadas</h2>
                           </div>
-                          <span className="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded font-mono border border-slate-800">
-                            {filteredMyOts.length} activas
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-300">{filteredMyOts.length} activas</span>
+                            <BotonModoSol />
+                          </div>
                         </div>
 
                         {/* Buscador Móvil */}
@@ -1425,7 +1525,7 @@ export default function VistaTerreno({
                               key={f.id}
                               type="button"
                               onClick={() => setQuickFilter(f.id)}
-                              className={`px-2 py-0.5 rounded-full text-[8px] font-mono whitespace-nowrap border transition-colors ${
+                              className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap border transition-colors ${
                                 quickFilter === f.id
                                   ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold'
                                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
@@ -1450,14 +1550,18 @@ export default function VistaTerreno({
                             return (
                               <div
                                 key={ot.codigo}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`Abrir OT ${ot.codigo}`}
                                 onClick={() => handleSelectOt(ot)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelectOt(ot); } }}
                                 className={`bg-slate-900 hover:bg-slate-850 border rounded-xl p-3 cursor-pointer transition-all group ${
                                   hasBlock ? 'border-red-500/30 bg-red-950/5' : 'border-slate-800'
                                 }`}
                               >
                                 <div className="flex justify-between items-start gap-1">
-                                  <span className="text-[9px] font-mono text-slate-500 font-bold">{ot.codigo}</span>
-                                  <span className={`text-[8px] font-mono px-1.5 py-0.2 rounded font-bold uppercase ${
+                                  <span className="text-xs font-mono text-slate-500 font-bold">{ot.codigo}</span>
+                                  <span className={`text-xs px-1.5 py-0.2 rounded font-bold ${
                                     ot.prioridad === 'Crítica' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
                                     ot.prioridad === 'Alta' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
                                     'bg-slate-800 text-slate-400'
@@ -1467,10 +1571,10 @@ export default function VistaTerreno({
                                 </div>
 
                                 <h4 className="text-xs font-bold text-slate-200 mt-1 truncate">{ot.activo}</h4>
-                                <p className="text-[9px] text-slate-400 truncate">{ot.plantaNombre} ({zona})</p>
+                                <p className="text-xs text-slate-400 truncate">{ot.plantaNombre} ({zona})</p>
 
                                 {ot.estado === 'Devuelta a ejecución' && (
-                                  <div className="mt-2 bg-rose-500/10 border border-rose-500/25 rounded-lg p-2 text-[9px] text-rose-300 font-mono">
+                                  <div className="mt-2 bg-rose-500/10 border border-rose-500/25 rounded-lg p-2 text-xs text-rose-300">
                                     <div className="font-bold flex items-center gap-1 text-rose-400">
                                       <span>↩️ DEVUELTA A EJECUCIÓN</span>
                                     </div>
@@ -1478,16 +1582,16 @@ export default function VistaTerreno({
                                       <p className="mt-1"><span className="text-rose-400 font-semibold">Motivo:</span> {ot.motivoDevolucion}</p>
                                     )}
                                     {ot.comentarioDevolucion && (
-                                      <p className="text-[8px] text-slate-400 mt-0.5"><span className="text-slate-500 font-semibold">Comentario:</span> {ot.comentarioDevolucion}</p>
+                                      <p className="text-xs text-slate-400 mt-0.5"><span className="text-slate-500 font-semibold">Comentario:</span> {ot.comentarioDevolucion}</p>
                                     )}
                                     {ot.detallesFaltantes && (
-                                      <p className="text-[8px] text-amber-300 mt-0.5"><span className="text-amber-400 font-semibold">Falta completar:</span> {ot.detallesFaltantes}</p>
+                                      <p className="text-xs text-amber-300 mt-0.5"><span className="text-amber-400 font-semibold">Falta completar:</span> {ot.detallesFaltantes}</p>
                                     )}
                                   </div>
                                 )}
 
                                 {/* Grid de Atributos */}
-                                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-[8px] font-mono text-slate-400 border-t border-slate-950 pt-2">
+                                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-400 border-t border-slate-950 pt-2">
                                   <div>
                                     <span className="text-slate-500">Tipo:</span> <span className="text-slate-300 font-semibold">{ot.tipo}</span>
                                   </div>
@@ -1509,7 +1613,7 @@ export default function VistaTerreno({
                                 </div>
 
                                 {/* Status de ejecución */}
-                                <div className="mt-2 flex flex-wrap gap-1 items-center pt-2 border-t border-slate-950 text-[8px] font-mono">
+                                <div className="mt-2 flex flex-wrap gap-1 items-center pt-2 border-t border-slate-950 text-xs">
                                   <span className={`px-1 rounded ${ot.astFirmado ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
                                     AST: {astStatus}
                                   </span>
@@ -1528,7 +1632,7 @@ export default function VistaTerreno({
                           })}
 
                           {filteredMyOts.length === 0 && (
-                            <div className="text-center py-10 text-[11px] text-slate-600 font-mono border border-dashed border-slate-900 rounded-xl">
+                            <div className="text-center py-10 text-sm text-slate-600 border border-dashed border-slate-900 rounded-xl">
                               No se encontraron tareas asignadas activas en terreno.
                             </div>
                           )}
@@ -1540,28 +1644,32 @@ export default function VistaTerreno({
                         <div className="flex items-center justify-between border-b border-slate-900 pb-2">
                           <button
                             onClick={() => setSelectedOt(null)}
-                            className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-white"
+                            className="min-h-11 -ml-2 px-2 flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
                           >
-                            <ArrowLeft className="h-3 w-3" /> Bandeja
+                            <ArrowLeft className="h-4 w-4" /> Bandeja
                           </button>
-                          <span className="text-[9px] font-mono text-emerald-400 font-bold">PASO {executionStep}/6</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-emerald-400 font-bold">Paso {executionStep}/6</span>
+                            <BotonModoSol />
+                          </div>
                         </div>
 
                         {/* Ficha de OT abreviada */}
                         <div className="bg-slate-900/40 p-2.5 rounded-xl border border-slate-850 space-y-1">
                           <div className="flex justify-between items-center">
-                            <span className="text-[9px] font-mono text-slate-500">{selectedOt.codigo}</span>
-                            <span className="text-[9px] font-mono text-slate-400 bg-slate-800 px-1.5 rounded">{selectedOt.tipo}</span>
+                            <span className="text-xs font-mono text-slate-500">{selectedOt.codigo}</span>
+                            <span className="text-xs text-slate-400 bg-slate-800 px-1.5 rounded">{selectedOt.tipo}</span>
                           </div>
                           <h3 className="text-xs font-bold text-white truncate">{selectedOt.activo}</h3>
-                          <p className="text-[9px] text-slate-400">{selectedOt.plantaNombre}</p>
+                          <p className="text-xs text-slate-400">{selectedOt.plantaNombre}</p>
                         </div>
 
-                        {/* SELECTOR MOCK DE TIPO DE OT (MODO PRUEBA - REGLA 8) */}
+                        {/* SELECTOR MOCK DE TIPO DE OT (MODO PRUEBA - REGLA 8). 17A: solo Super Admin; cambia datos reales de la OT */}
+                        {userRole === 'SUPER_ADMIN_ORBI' && (
                         <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl space-y-1.5">
-                          <div className="flex items-center gap-1.5 text-[9px] font-mono font-bold text-amber-400">
-                            <span className="animate-pulse">🧪</span>
-                            <span>SELECTOR MOCK DE COMPORTAMIENTO (REGLA 8)</span>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                            <Wrench className="h-4 w-4" aria-hidden="true" />
+                            <span>Herramienta de pruebas (solo Super Admin)</span>
                           </div>
                           <select
                             value={mockOtType}
@@ -1570,39 +1678,40 @@ export default function VistaTerreno({
                               setMockOtType(val);
                               handleApplyMockType(val);
                             }}
-                            className="w-full bg-slate-950 border border-amber-500/20 text-[10px] font-mono text-amber-300 rounded px-2 py-1 outline-none focus:border-amber-500 cursor-pointer"
+                            className="w-full bg-slate-950 border border-amber-500/20 text-xs text-amber-300 rounded px-2 py-1 outline-none focus:border-amber-500 cursor-pointer"
                           >
                             <option value="">-- Cambiar tipo para pruebas --</option>
-                            <option value="simple">🟢 OT Simple (Sin AST/Checklist/Evidencia)</option>
-                            <option value="preventivo">🔵 OT Preventivo Normal (Checklist + Evidencia)</option>
-                            <option value="correctivo_repuesto">🔧 OT Correctivo con Repuestos (Insumos + Diagnóstico)</option>
-                            <option value="critica_ast">⚠️ OT Crítica con AST (Firma requerida)</option>
-                            <option value="loto_hse">🛡️ OT con LOTO / HSE (Permisos + Firmas + Validaciones)</option>
+                            <option value="simple">OT Simple (Sin AST/Checklist/Evidencia)</option>
+                            <option value="preventivo">OT Preventivo Normal (Checklist + Evidencia)</option>
+                            <option value="correctivo_repuesto">OT Correctivo con Repuestos (Insumos + Diagnóstico)</option>
+                            <option value="critica_ast">OT Crítica con AST (Firma requerida)</option>
+                            <option value="loto_hse">OT con LOTO / HSE (Permisos + Firmas + Validaciones)</option>
                           </select>
                         </div>
+                        )}
 
                         {selectedOt.estado === 'Devuelta a ejecución' && (
-                          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-[10px] text-rose-300 font-mono space-y-1.5">
+                          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-xs text-rose-300 space-y-1.5">
                             <div className="font-bold flex items-center gap-1 text-rose-400 text-xs">
-                              <span>↩️ DETALLES DE LA DEVOLUCIÓN</span>
+                              <CornerDownRight className="h-4 w-4" aria-hidden="true" /><span>Detalle de la devolución</span>
                             </div>
                             {selectedOt.motivoDevolucion && (
                               <p><span className="text-rose-400 font-semibold">Motivo:</span> {selectedOt.motivoDevolucion}</p>
                             )}
                             {selectedOt.comentarioDevolucion && (
-                              <p className="text-[9px] text-slate-300"><span className="text-slate-400 font-semibold">Observación del Revisor:</span> "{selectedOt.comentarioDevolucion}"</p>
+                              <p className="text-xs text-slate-300"><span className="text-slate-400 font-semibold">Observación del Revisor:</span> "{selectedOt.comentarioDevolucion}"</p>
                             )}
                             {selectedOt.detallesFaltantes && (
-                              <p className="text-[9px] text-amber-300"><span className="text-amber-400 font-semibold">Falta Completar:</span> {selectedOt.detallesFaltantes}</p>
+                              <p className="text-xs text-amber-300"><span className="text-amber-400 font-semibold">Falta Completar:</span> {selectedOt.detallesFaltantes}</p>
                             )}
-                            <div className="text-[8px] text-slate-500 italic mt-1 border-t border-rose-500/10 pt-1">
+                            <div className="text-xs text-slate-500 italic mt-1 border-t border-rose-500/10 pt-1">
                               Complete los ítems pendientes y vuelva al Paso 6 para reenviar la OT a revisión.
                             </div>
                           </div>
                         )}
 
                         {/* Indicador de pasos horizontal */}
-                        <div className="flex justify-between items-center px-1 text-[9px] font-mono text-slate-500">
+                        <div className="flex gap-1 items-stretch">
                           {getVisibleSteps(selectedOt).map((num) => {
                             const stepLabels: Record<number, string> = {
                               1: 'Entrada',
@@ -1620,10 +1729,11 @@ export default function VistaTerreno({
                                   (num > 2 && !selectedOt.astFirmado && selectedOt.requiereAST)
                                 }
                                 onClick={() => setExecutionStep(num)}
-                                className={`h-5 px-1.5 rounded-md flex items-center justify-center font-bold border text-[8px] tracking-tighter transition-colors ${
+                                aria-current={executionStep === num ? 'step' : undefined}
+                                className={`flex-1 min-w-0 min-h-11 px-1 rounded-lg flex items-center justify-center font-semibold border text-[13px] truncate transition-colors ${
                                   executionStep === num ? 'bg-emerald-500 text-slate-950 border-emerald-400' :
                                   (num === 1 && selectedOt.llegadaConfirmada) || (num === 2 && selectedOt.astFirmado) ? 'bg-emerald-950 text-emerald-400 border-emerald-900' :
-                                  'bg-slate-900 text-slate-600 border-slate-800'
+                                  'bg-slate-900 text-slate-400 border-slate-800 disabled:opacity-60'
                                 }`}
                                 title={stepLabels[num]}
                               >
@@ -1638,22 +1748,22 @@ export default function VistaTerreno({
                           <div className="space-y-3.5 animate-fade-in">
                             <div className="text-center space-y-1">
                               <MapPin className="h-8 w-8 text-cyan-400 mx-auto animate-bounce" />
-                              <h4 className="text-xs font-bold text-slate-200">Paso 1: Check-in en Planta (Simulado)</h4>
-                              <p className="text-[10px] text-slate-400">Verifique el estado de su terminal y registre la confirmación de llegada simulada.</p>
+                              <h4 className="text-xs font-bold text-slate-200">Paso 1: Llegada a planta</h4>
+                              <p className="text-xs text-slate-400">Verifique el estado de su terminal y registre la confirmación de llegada simulada.</p>
                             </div>
 
                             <div className="space-y-2 bg-slate-900 p-3 rounded-xl border border-slate-850">
                               <div>
-                                <label className="text-[9px] font-mono text-slate-500 block uppercase">Hora de Entrada Terreno</label>
+                                <label className="text-xs text-slate-500 block">Hora de Entrada Terreno</label>
                                 <input
                                   type="text"
                                   value={tempHoraLlegada}
                                   onChange={(e) => setTempHoraLlegada(e.target.value)}
-                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none font-mono"
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none"
                                 />
                               </div>
                               <div>
-                                <label className="text-[9px] font-mono text-slate-500 block uppercase">Observación de Arribo</label>
+                                <label className="text-xs text-slate-500 block">Observación de Arribo</label>
                                 <textarea
                                   rows={2}
                                   value={tempObsLlegada}
@@ -1662,21 +1772,11 @@ export default function VistaTerreno({
                                   className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-xs text-white outline-none resize-none mt-1"
                                 ></textarea>
                               </div>
-                              <div className="flex items-center gap-1.5 text-[9px] text-slate-400">
-                                <span className="h-2 w-2 rounded-full bg-emerald-400 inline-block animate-ping"></span>
-                                <span>Coordenadas de arribo simuladas asociadas con éxito.</span>
-                              </div>
-                              <p className="text-[8px] text-slate-500 font-mono leading-normal mt-1 border-t border-slate-850/50 pt-1.5">
-                                Nota: La integración GPS real podrá conectarse en una fase futura con ORBI FieldOps / ORBI GEO NEXT.
-                              </p>
                             </div>
 
-                            <button
-                              onClick={handleConfirmArrival}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
-                            >
-                              Confirmar Arribo <ChevronRight className="h-4 w-4" />
-                            </button>
+                            <Button variant="primary" fullWidth onClick={handleConfirmArrival}>
+                              Confirmar llegada <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                            </Button>
                           </div>
                         )}
 
@@ -1686,13 +1786,13 @@ export default function VistaTerreno({
                             <div className="text-center space-y-1">
                               <Shield className="h-8 w-8 text-rose-400 mx-auto" />
                               <h4 className="text-xs font-bold text-slate-200">Paso 2: AST - Análisis Seguro de Trabajo</h4>
-                              <p className="text-[10px] text-slate-400">Garantice un entorno seguro antes de iniciar el trabajo técnico.</p>
+                              <p className="text-xs text-slate-400">Garantice un entorno seguro antes de iniciar el trabajo técnico.</p>
                             </div>
 
                             <div className="space-y-3 bg-slate-900 p-3 rounded-xl border border-slate-850 text-xs">
                               <div className="flex justify-between items-center border-b border-slate-850 pb-2">
-                                <span className="text-slate-400 font-mono text-[10px]">¿Requiere AST?</span>
-                                <span className="text-emerald-400 font-bold font-mono">REQUERIDO</span>
+                                <span className="text-slate-400 text-xs">¿Requiere AST?</span>
+                                <span className="text-emerald-400 font-bold">REQUERIDO</span>
                               </div>
 
                               {/* Firma de AST */}
@@ -1705,13 +1805,13 @@ export default function VistaTerreno({
                                 />
                                 <div>
                                   <span className="font-bold text-slate-200 block">Declarar AST Firmado</span>
-                                  <span className="text-[9px] text-slate-400">Declaro bajo firma electrónica que he analizado los riesgos mecánicos y eléctricos en el sitio.</span>
+                                  <span className="text-xs text-slate-400">Declaro bajo firma electrónica que he analizado los riesgos mecánicos y eléctricos en el sitio.</span>
                                 </div>
                               </label>
 
                               {/* Riesgos Detectados */}
                               <div>
-                                <span className="text-[9px] font-mono text-slate-500 uppercase block mb-1">Riesgos Detectados Terreno</span>
+                                <span className="text-xs text-slate-500 block mb-1">Riesgos Detectados Terreno</span>
                                 <div className="grid grid-cols-2 gap-1.5">
                                   {['Riesgo Eléctrico', 'Trabajo en Altura', 'Hotspots / Calor', 'Caída de Objeto'].map(r => {
                                     const active = tempRiesgos.includes(r);
@@ -1723,7 +1823,7 @@ export default function VistaTerreno({
                                           if (active) setTempRiesgos(tempRiesgos.filter(x => x !== r));
                                           else setTempRiesgos([...tempRiesgos, r]);
                                         }}
-                                        className={`p-1 text-[9px] font-mono border rounded text-left truncate transition-colors ${
+                                        className={`p-1 text-xs border rounded text-left truncate transition-colors ${
                                           active ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 font-bold' : 'bg-slate-950 text-slate-400 border-slate-800'
                                         }`}
                                       >
@@ -1736,19 +1836,19 @@ export default function VistaTerreno({
 
                               {/* Permiso de trabajo */}
                               <div>
-                                <label className="text-[9px] font-mono text-slate-500 block uppercase">Nº Permiso de Trabajo O&M</label>
+                                <label className="text-xs text-slate-500 block">Nº Permiso de Trabajo O&M</label>
                                 <input
                                   type="text"
                                   placeholder="Ej: PT-9481-OM-CHILE"
                                   value={tempPermisoTrabajoNum}
                                   onChange={(e) => setTempPermisoTrabajoNum(e.target.value)}
-                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none font-mono"
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none"
                                 />
                               </div>
 
                               {/* Firma Ejecutor */}
                               <div>
-                                <label className="text-[9px] font-mono text-slate-500 block uppercase">Firma Digital del Ejecutor (Nombre)</label>
+                                <label className="text-xs text-slate-500 block">Firma Digital del Ejecutor (Nombre)</label>
                                 <input
                                   type="text"
                                   placeholder="Escriba su nombre completo"
@@ -1766,7 +1866,7 @@ export default function VistaTerreno({
 
                             <button
                               onClick={handleSaveSecurity}
-                              className="w-full py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1 transition-colors"
+                              className="w-full min-h-11 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1 transition-colors"
                             >
                               Registrar Seguridad <ChevronRight className="h-4 w-4" />
                             </button>
@@ -1779,65 +1879,118 @@ export default function VistaTerreno({
                             <div className="text-center space-y-1">
                               <CheckCircle className="h-8 w-8 text-emerald-400 mx-auto" />
                               <h4 className="text-xs font-bold text-slate-200">Paso 3: Checklist Técnico</h4>
-                              <p className="text-[10px] text-slate-400">Diligencie cada punto del checklist operacional.</p>
+                              <p className="text-xs text-slate-400">Diligencie cada punto del checklist operacional.</p>
                             </div>
 
                             <div className="space-y-2 bg-slate-900 p-2.5 rounded-xl border border-slate-850 max-h-[260px] overflow-y-auto">
-                              {tempChecklist.map((item, idx) => (
-                                <div key={idx} className="bg-slate-950 p-2 rounded-lg border border-slate-850 space-y-1 text-[11px]">
-                                  <div className="font-semibold text-slate-200 leading-tight">
-                                    {item.item}
+                              {tempChecklist.map((item, idx) => {
+                                // 17A UX P1: el código de la plantilla va aparte, en pequeño; la pregunta, grande
+                                const m = /^\[([^\]]+)\]\s*(.*)$/.exec(item.item || '');
+                                const codigo = m ? m[1] : '';
+                                const pregunta = m ? m[2] : item.item;
+                                const toggle = (activo: boolean, colores: string) =>
+                                  `min-h-11 px-2 inline-flex items-center justify-center gap-1 rounded-lg text-sm font-semibold border transition-colors ${activo ? colores : 'bg-slate-900 text-slate-300 border-slate-700'}`;
+                                return (
+                                <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2.5">
+                                  <div>
+                                    {codigo && <div className="text-xs font-mono text-slate-500">{codigo}</div>}
+                                    <div className="text-base font-semibold text-slate-100 leading-snug">{pregunta}</div>
                                   </div>
-                                  
-                                  <div className="grid grid-cols-3 gap-1 pt-1 border-t border-slate-900 font-mono text-[9px]">
+                                  {/* 17A Fase 3: foto por pregunta */}
+                                  {(item.evidenciaRequerida || item.templateId) && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {(item.fotos || []).map((f: { fileId: string; url: string }) => (
+                                        photoSrc(f.url)
+                                          ? <img key={f.fileId} src={photoSrc(f.url)} alt="Foto de la pregunta" className={`h-14 w-14 object-cover rounded-lg ${isPendingPhoto(f.url) ? 'opacity-70 ring-2 ring-amber-400' : ''}`} />
+                                          : <span key={f.fileId} className="text-xs text-amber-400">Foto pendiente</span>
+                                      ))}
+                                      <label className={`relative min-h-11 inline-flex items-center gap-2 px-3 rounded-lg border text-sm font-semibold focus-within:ring-2 focus-within:ring-amber-400 ${item.evidenciaRequerida && !(item.fotos || []).length ? 'border-amber-500/60 text-amber-300' : 'border-slate-700 text-slate-300'} ${checklistPhotoBusy === idx ? 'opacity-60' : 'cursor-pointer'}`}>
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          capture="environment"
+                                          className="sr-only"
+                                          aria-label={`Foto para: ${pregunta}`}
+                                          disabled={checklistPhotoBusy !== null}
+                                          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void handleChecklistPhoto(idx, f); }}
+                                        />
+                                        <Camera className="h-4 w-4" aria-hidden="true" />
+                                        {checklistPhotoBusy === idx ? 'Guardando…' : item.evidenciaRequerida ? 'Foto requerida' : 'Agregar foto'}
+                                      </label>
+                                    </div>
+                                  )}
+                                  {/* 17A Fase 2: preguntas de plantilla con valor numérico o texto */}
+                                  {(item.tipo === 'numero' || item.tipo === 'texto') && (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="text"
+                                        inputMode={item.tipo === 'numero' ? 'decimal' : 'text'}
+                                        aria-label={`Valor de: ${pregunta}`}
+                                        placeholder={item.tipo === 'numero' ? `Valor${item.min !== undefined || item.max !== undefined ? ` (${item.min ?? '–'} a ${item.max ?? '–'})` : ''}` : 'Respuesta'}
+                                        value={item.valor ?? ''}
+                                        onChange={(e) => handleChecklistValue(idx, e.target.value)}
+                                        className={`flex-1 min-h-11 bg-slate-900 border rounded-lg px-3 text-base text-white outline-none ${item.fueraDeRango ? 'border-amber-500' : 'border-slate-700'}`}
+                                      />
+                                      {item.unidad && <span className="text-sm text-slate-300">{item.unidad}</span>}
+                                    </div>
+                                  )}
+                                  {item.fueraDeRango && <div className="text-sm text-amber-400 font-semibold">Fuera de rango</div>}
+
+                                  <div className="grid grid-cols-3 gap-2 pt-1" role="group" aria-label={`Estado de: ${pregunta}`}>
                                     <button
                                       type="button"
+                                      aria-pressed={Boolean(item.completado)}
                                       onClick={() => handleToggleChecklistField(idx, 'completado')}
-                                      className={`py-0.5 rounded text-center ${
-                                        item.completado ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold' : 'bg-slate-900 text-slate-500 border border-slate-850'
-                                      }`}
+                                      className={toggle(Boolean(item.completado), 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60')}
                                     >
-                                      {item.completado ? '✔ Hecho' : '○ Pendiente'}
+                                      {item.completado && <Check className="h-4 w-4" aria-hidden="true" />}Hecho
                                     </button>
-
                                     <button
                                       type="button"
+                                      aria-pressed={Boolean(item.noAplica)}
                                       onClick={() => handleToggleChecklistField(idx, 'noAplica')}
-                                      className={`py-0.5 rounded text-center ${
-                                        item.noAplica ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-bold' : 'bg-slate-900 text-slate-500 border border-slate-850'
-                                      }`}
+                                      className={toggle(Boolean(item.noAplica), 'bg-indigo-500/20 text-indigo-300 border-indigo-500/60')}
                                     >
-                                      {item.noAplica ? '○ N/A' : '○ Aplica'}
+                                      {item.noAplica && <Check className="h-4 w-4" aria-hidden="true" />}No aplica
                                     </button>
-
                                     <button
                                       type="button"
+                                      aria-pressed={Boolean(item.hallazgo)}
                                       onClick={() => handleToggleChecklistField(idx, 'hallazgo')}
-                                      className={`py-0.5 rounded text-center ${
-                                        item.hallazgo ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold' : 'bg-slate-900 text-slate-500 border border-slate-850'
-                                      }`}
+                                      className={toggle(Boolean(item.hallazgo), 'bg-amber-500/20 text-amber-300 border-amber-500/60')}
                                     >
-                                      {item.hallazgo ? '⚠ Hallazgo' : '○ Sin Hallazgo'}
+                                      {item.hallazgo && <AlertTriangle className="h-4 w-4" aria-hidden="true" />}Hallazgo
                                     </button>
                                   </div>
 
                                   <input
                                     type="text"
-                                    placeholder="Observación del ítem..."
+                                    aria-label={`Observación de: ${pregunta}`}
+                                    placeholder="Observación (opcional)"
                                     value={item.observacion || ''}
                                     onChange={(e) => handleUpdateChecklistObs(idx, e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-850 rounded px-1.5 py-0.5 text-[10px] text-white outline-none mt-1"
+                                    className="w-full min-h-11 bg-slate-900 border border-slate-700 rounded-lg px-3 text-sm text-white outline-none"
                                   />
+                                  {/* 17B: correctivo de seguimiento desde el hallazgo */}
+                                  {item.hallazgo && (
+                                    <HallazgoSeguimiento
+                                      origin={selectedOt}
+                                      pregunta={item.item}
+                                      observacion={item.observacion}
+                                      fotos={item.fotos}
+                                      ots={ots}
+                                      userName={activeUserName}
+                                      onCreate={(nueva) => onUpdateOts([...otsLatestRef.current, nueva])}
+                                    />
+                                  )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
 
-                            <button
-                              onClick={handleSaveChecklist}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
-                            >
-                              Guardar Checklist <ChevronRight className="h-4 w-4" />
-                            </button>
+                            <Button variant="primary" fullWidth onClick={handleSaveChecklist}>
+                              Guardar checklist <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                            </Button>
                           </div>
                         )}
 
@@ -1846,36 +1999,36 @@ export default function VistaTerreno({
                           <div className="space-y-4 animate-fade-in">
                             <div className="text-center space-y-1">
                               <Camera className="h-8 w-8 text-indigo-400 mx-auto" />
-                              <h4 className="text-xs font-bold text-slate-200">Paso 4: Evidence Pack</h4>
-                              <p className="text-[10px] text-slate-400">Registre evidencias de terreno asociadas al activo.</p>
+                              <h4 className="text-xs font-bold text-slate-200">Paso 4: Fotos de evidencia</h4>
+                              <p className="text-xs text-slate-400">Registre evidencias de terreno asociadas al activo.</p>
                             </div>
 
                             {/* FOTOS REQUERIDAS (REGLA 7) */}
                             <div className="bg-slate-950 p-3 rounded-xl border border-slate-900 space-y-2">
-                              <span className="text-[9px] font-mono text-slate-500 uppercase font-bold block border-b border-slate-900 pb-1">FOTOS REQUERIDAS EN TERRENO:</span>
-                              <div className="space-y-1.5 text-[10px] font-mono">
+                              <span className="text-sm text-slate-300 font-semibold block border-b border-slate-900 pb-1">Fotos requeridas</span>
+                              <div className="space-y-1.5 text-sm">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-300">📸 1. Foto Antes (LOTO / Seguridad):</span>
+                                  <span className="text-slate-300">1. Antes (LOTO / Seguridad):</span>
                                   {tempEvidenceList.some(e => e.type === 'before' || e.type === 'hse') ? (
-                                    <span className="text-emerald-400 font-extrabold uppercase text-[9px] flex items-center gap-0.5">🟢 Cargada</span>
+                                    <span className="text-ok font-semibold text-xs flex items-center gap-1"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Cargada</span>
                                   ) : (
-                                    <span className="text-slate-500 font-bold uppercase text-[9px]">⚪ Pendiente</span>
+                                    <span className="text-slate-400 text-xs">Pendiente</span>
                                   )}
                                 </div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-300">📸 2. Foto Durante (Trabajo / Rejilla):</span>
+                                  <span className="text-slate-300">2. Durante (Trabajo / Rejilla):</span>
                                   {tempEvidenceList.some(e => e.type === 'during' || e.type === 'spare') ? (
-                                    <span className="text-emerald-400 font-extrabold uppercase text-[9px] flex items-center gap-0.5">🟢 Cargada</span>
+                                    <span className="text-ok font-semibold text-xs flex items-center gap-1"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Cargada</span>
                                   ) : (
-                                    <span className="text-slate-500 font-bold uppercase text-[9px]">⚪ Pendiente</span>
+                                    <span className="text-slate-400 text-xs">Pendiente</span>
                                   )}
                                 </div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-300">📸 3. Foto Después (Limpieza / Orden):</span>
+                                  <span className="text-slate-300">3. Después (Limpieza / Orden):</span>
                                   {tempEvidenceList.some(e => e.type === 'after') ? (
-                                    <span className="text-emerald-400 font-extrabold uppercase text-[9px] flex items-center gap-0.5">🟢 Cargada</span>
+                                    <span className="text-ok font-semibold text-xs flex items-center gap-1"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Cargada</span>
                                   ) : (
-                                    <span className="text-slate-500 font-bold uppercase text-[9px]">⚪ Pendiente</span>
+                                    <span className="text-slate-400 text-xs">Pendiente</span>
                                   )}
                                 </div>
                               </div>
@@ -1883,12 +2036,17 @@ export default function VistaTerreno({
 
                             {/* FOTOS CARGADAS (REGLA 7) */}
                             {tempEvidenceList.length > 0 && (
-                              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-[10px] max-h-[120px] overflow-y-auto font-mono">
-                                <span className="text-[9px] text-slate-500 uppercase block font-bold">Fotos Cargadas Sincronizadas ({tempEvidenceList.length})</span>
+                              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-xs max-h-[120px] overflow-y-auto">
+                                <span className="text-xs text-slate-500 uppercase block font-bold">Fotos de la OT ({tempEvidenceList.length}){tempEvidenceList.some(e => isPendingPhoto(e.fileUrl)) ? ' · algunas esperan señal' : ''}</span>
                                 {tempEvidenceList.map((ev) => (
                                   <div key={ev.evidenceId} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-900">
-                                    <div className="truncate pr-2">
-                                      <span className="text-[8px] bg-indigo-500/15 text-indigo-400 px-1 rounded uppercase font-bold mr-1">{ev.type}</span>
+                                    <div className="truncate pr-2 flex items-center gap-1.5">
+                                      {photoSrc(ev.fileUrl) && (
+                                        <a href={photoSrc(ev.fileUrl)} target="_blank" rel="noopener noreferrer">
+                                          <img src={photoSrc(ev.fileUrl)} alt={ev.label} className={`h-8 w-8 object-cover rounded ${isPendingPhoto(ev.fileUrl) ? 'opacity-70 ring-1 ring-amber-400' : ''}`} loading="lazy" />
+                                        </a>
+                                      )}
+                                      <span className="text-xs bg-indigo-500/15 text-indigo-400 px-1 rounded uppercase font-bold mr-1">{ev.type}</span>
                                       <span className="text-slate-300 font-bold">{ev.label}</span>
                                     </div>
                                     <button
@@ -1904,12 +2062,12 @@ export default function VistaTerreno({
 
                             {/* FORMULARIO AGREGAR EVIDENCIA (REGLA 7) */}
                             <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-2 text-xs">
-                              <span className="text-[9px] font-mono text-indigo-400 uppercase font-bold block">Agregar Evidencia de Campo</span>
+                              <span className="text-xs text-indigo-400 font-bold block">Agregar Evidencia de Campo</span>
                               <div>
                                 <select
                                   value={newEvidenceType}
                                   onChange={(e) => setNewEvidenceType(e.target.value as any)}
-                                  className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-white outline-none font-mono"
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-white outline-none"
                                 >
                                   <option value="before">Antes de intervenir (HSE/LOTO)</option>
                                   <option value="during">Durante el trabajo (Limpieza)</option>
@@ -1936,61 +2094,49 @@ export default function VistaTerreno({
                                 />
                               </div>
 
-                              <button
-                                onClick={handleUploadSimulatedPhoto}
-                                disabled={simulatingPhoto}
-                                className="w-full py-1.5 bg-indigo-500/10 hover:bg-indigo-500 hover:text-slate-950 font-mono text-[11px] font-bold rounded border border-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors"
+                              <label
+                                className={`w-full min-h-11 py-1.5 bg-indigo-500/10 hover:bg-indigo-500 hover:text-slate-950 text-sm font-bold rounded border border-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors ${simulatingPhoto ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
                               >
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  aria-label="Tomar o elegir foto de evidencia"
+                                  className="sr-only"
+                                  disabled={simulatingPhoto}
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    e.target.value = '';
+                                    void handleUploadPhoto(file);
+                                  }}
+                                />
                                 {simulatingPhoto ? (
                                   <>
                                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                                    Sincronizando foto...
+                                    Subiendo foto...
                                   </>
                                 ) : (
                                   <>
                                     <Camera className="h-3.5 w-3.5" />
-                                    Agregar Evidencia (Capturar)
+                                    Tomar o elegir foto
                                   </>
                                 )}
-                              </button>
+                              </label>
                             </div>
 
                             {/* MENSAJE DE COMPLEMENTO DE ACTIVO */}
                             {activoCompletadoMsg && (
-                              <div className="bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg text-[10px] text-emerald-400 font-mono flex items-center gap-1.5 animate-fade-in">
+                              <div className="bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg text-xs text-emerald-400 flex items-center gap-1.5 animate-fade-in">
                                 <CheckSquare className="h-3.5 w-3.5 shrink-0" />
                                 <span>{activoCompletadoMsg}</span>
                               </div>
                             )}
 
-                            {/* BOTÓN MARCAR ACTIVO COMPLETO (REGLA 7) */}
-                            <button
-                              onClick={() => {
-                                // Simular marcado de activo completo
-                                const newId = `EV-TECH-${Date.now().toString().slice(-4)}`;
-                                const completedEvidence: OTEvidencePackItem = {
-                                  evidenceId: newId,
-                                  otId: selectedOt.codigo,
-                                  type: 'after',
-                                  label: `Después - Limpieza ${selectedOt.activo.includes('INV-') ? selectedOt.activo.substring(selectedOt.activo.indexOf('INV-'), selectedOt.activo.indexOf('INV-') + 6) : 'Activo General'}`,
-                                  description: 'Soplado, limpieza interna e inspección final de orden y aseo completados de forma conforme.',
-                                  simulatedFileName: 'inv_tech_after_complete.jpg',
-                                  uploadedBy: 'Víctor León',
-                                  uploadedAt: '2026-07-06 17:30',
-                                  status: 'Cargada'
-                                };
-                                setTempEvidenceList(prev => [...prev, completedEvidence]);
-                                setActivoCompletadoMsg(`✓ El activo ${selectedOt.activo.includes('INV-') ? selectedOt.activo.substring(selectedOt.activo.indexOf('INV-'), selectedOt.activo.indexOf('INV-') + 6) : 'actual'} ha sido marcado como COMPLETADO en terreno.`);
-                                setTimeout(() => setActivoCompletadoMsg(null), 5000);
-                              }}
-                              className="w-full py-2 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/35 hover:to-teal-500/35 text-emerald-400 hover:text-white font-mono text-xs font-black rounded-xl border border-emerald-500/30 hover:border-emerald-500/50 flex items-center justify-center gap-1.5 transition-all shadow-md"
-                            >
-                              <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Marcar activo completo
-                            </button>
+                            {/* 17A: se quitó "marcar activo completo", que creaba evidencias sin foto real */}
 
                             <button
                               onClick={() => setExecutionStep(5)}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
+                              className="w-full min-h-11 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-lg flex items-center justify-center gap-1"
                             >
                               Siguiente Paso <ChevronRight className="h-4 w-4" />
                             </button>
@@ -2003,28 +2149,43 @@ export default function VistaTerreno({
                             <div className="text-center space-y-1">
                               <Package className="h-8 w-8 text-amber-400 mx-auto" />
                               <h4 className="text-xs font-bold text-slate-200">Paso 5: Recursos y Diagnóstico</h4>
-                              <p className="text-[10px] text-slate-400">Declare HH estimadas de terreno, insumos utilizados y diagnóstico final.</p>
+                              <p className="text-xs text-slate-400">Declare HH estimadas de terreno, insumos utilizados y diagnóstico final.</p>
                             </div>
+
+                            {/* 17A Fase 2: horas por técnico, codificación de falla y motivo de espera */}
+                            <OTMaintenanceFields
+                              ot={selectedOt}
+                              ots={ots}
+                              userName={activeUserName}
+                              canEditPlanning={false}
+                              compact
+                              onChange={(patch) => {
+                                const latest = otsLatestRef.current.find(o => o.codigo === selectedOt.codigo) ?? selectedOt;
+                                const updated: OT = { ...latest, ...patch };
+                                setSelectedOt(updated);
+                                onUpdateOts(otsLatestRef.current.map(o => (o.codigo === updated.codigo ? updated : o)));
+                              }}
+                            />
 
                             <div className="space-y-2 bg-slate-900 p-2.5 rounded-xl border border-slate-850 max-h-[260px] overflow-y-auto text-xs">
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <label className="text-[9px] font-mono text-slate-500 block uppercase">HH Trabajadas hoy</label>
+                                  <label className="text-xs text-slate-500 block">HH Trabajadas hoy</label>
                                   <input
                                     type="number"
                                     min="1"
                                     value={tempHhReales}
                                     onChange={(e) => setTempHhReales(Math.max(1, parseInt(e.target.value) || 0))}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none font-mono"
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none"
                                   />
                                 </div>
-                                <div className="text-[9px] font-mono text-slate-400 flex items-end pb-1 leading-tight">
+                                <div className="text-xs text-slate-400 flex items-end pb-1 leading-tight">
                                   *Estimadas originales: {selectedOt.hhEstimadas || 2} HH
                                 </div>
                               </div>
 
                               <div>
-                                <label className="text-[9px] font-mono text-slate-500 block uppercase">Diagnóstico Final</label>
+                                <label className="text-xs text-slate-500 block">Diagnóstico Final</label>
                                 <textarea
                                   rows={2}
                                   value={tempDiagnosticoFinal}
@@ -2035,7 +2196,7 @@ export default function VistaTerreno({
                               </div>
 
                               <div>
-                                <label className="text-[9px] font-mono text-slate-500 block uppercase">Acción Correctiva Realizada</label>
+                                <label className="text-xs text-slate-500 block">Acción Correctiva Realizada</label>
                                 <textarea
                                   rows={2}
                                   value={tempAccionRealizada}
@@ -2047,15 +2208,15 @@ export default function VistaTerreno({
 
                               {/* Sección de Repuestos Utilizados */}
                               <div className="border-t border-slate-800 pt-2 space-y-1">
-                                <span className="text-[9px] font-mono text-slate-500 uppercase block">Repuestos Consumidos en Turno</span>
+                                <span className="text-xs text-slate-500 block">Repuestos Consumidos en Turno</span>
                                 {tempSparesUsed.length > 0 && (
                                   <div className="space-y-1">
                                     {tempSparesUsed.map(s => (
-                                      <div key={s.codigo} className="flex justify-between items-center bg-slate-950 p-1 rounded text-[10px] font-mono border border-slate-900">
+                                      <div key={s.codigo} className="flex justify-between items-center bg-slate-950 p-1 rounded text-xs font-mono border border-slate-900">
                                         <span className="truncate">{s.nombre} ({s.codigo}) x{s.cantidad}</span>
                                         <button
                                           onClick={() => handleRemoveRepuestoTerreno(s.codigo, s.cantidad)}
-                                          className="text-slate-500 hover:text-rose-400 font-bold font-mono px-1"
+                                          className="text-slate-500 hover:text-rose-400 font-bold px-1"
                                         >
                                           ×
                                         </button>
@@ -2068,7 +2229,7 @@ export default function VistaTerreno({
                                   <select
                                     value={selectedRepuestoId}
                                     onChange={(e) => setSelectedRepuestoId(e.target.value)}
-                                    className="flex-1 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-[10px] text-white outline-none"
+                                    className="flex-1 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-white outline-none"
                                   >
                                     <option value="">-- Seleccionar repuesto --</option>
                                     {loadInventory()
@@ -2085,7 +2246,7 @@ export default function VistaTerreno({
                                     min="1"
                                     value={repuestoCantidad}
                                     onChange={(e) => setRepuestoCantidad(Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="w-10 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-white text-center font-mono"
+                                    className="w-10 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-xs text-white text-center"
                                   />
                                   <button
                                     onClick={handleAddRepuestoTerreno}
@@ -2099,7 +2260,7 @@ export default function VistaTerreno({
 
                             <button
                               onClick={handleSaveHHAndDiagnosis}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
+                              className="w-full min-h-11 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-lg flex items-center justify-center gap-1"
                             >
                               Guardar Recursos <ChevronRight className="h-4 w-4" />
                             </button>
@@ -2112,12 +2273,12 @@ export default function VistaTerreno({
                             <div className="text-center space-y-1">
                               <Zap className="h-8 w-8 text-emerald-400 mx-auto animate-pulse" />
                               <h4 className="text-xs font-bold text-slate-200">Paso 6: Finalización y Envío</h4>
-                              <p className="text-[10px] text-slate-400">Seleccione si propondrá el cierre técnico o registrará un bloqueo de terreno.</p>
+                              <p className="text-xs text-slate-400">Seleccione si propondrá el cierre técnico o registrará un bloqueo de terreno.</p>
                             </div>
 
                             {/* Alerta de validaciones de cumplimiento (Regla 2) */}
-                            <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-[10px] font-mono">
-                              <span className="text-slate-500 uppercase block text-[9px]">Validaciones de Compliance</span>
+                            <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-xs">
+                              <span className="text-slate-500 uppercase block text-xs">Validaciones de Compliance</span>
                               
                               {selectedOt.requiereChecklist !== false && (
                                 <div className="flex items-center gap-1.5">
@@ -2176,7 +2337,7 @@ export default function VistaTerreno({
                             <div className="space-y-2.5">
                               {/* Opción 1: Proponer Cierre */}
                               <div className="bg-emerald-950/25 border border-emerald-500/20 p-2.5 rounded-xl space-y-2">
-                                <h5 className="font-bold text-emerald-400 font-mono text-[10px] uppercase">
+                                <h5 className="font-bold text-emerald-400 text-xs">
                                   {selectedOt.estado === 'Devuelta a ejecución' ? 'Opción A: Reenviar a Revisión de Cierre' : 'Opción A: Proponer Cierre Técnico'}
                                 </h5>
                                 <input
@@ -2184,27 +2345,20 @@ export default function VistaTerreno({
                                   placeholder={selectedOt.estado === 'Devuelta a ejecución' ? 'Comentarios sobre corrección realizada...' : 'Comentario para supervisor...'}
                                   value={comentarioCierre}
                                   onChange={(e) => setComentarioCierre(e.target.value)}
-                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-white outline-none"
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm text-white outline-none"
                                 />
-                                <button
-                                  onClick={handleProposeClosure}
-                                  className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold font-mono rounded"
-                                >
-                                  {selectedOt.estado === 'Devuelta a ejecución' ? '🔄 Reenviar a Revisión de Cierre' : '🚀 Solicitar Cierre de OT'}
-                                </button>
+                                <Button variant="primary" fullWidth onClick={handleProposeClosure}>
+                                  {selectedOt.estado === 'Devuelta a ejecución' ? 'Reenviar a revisión de cierre' : 'Solicitar cierre de OT'}
+                                </Button>
                               </div>
 
                               {/* Opción 2: Registrar Bloqueo */}
                               <div className="bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl space-y-1">
-                                <h5 className="font-bold text-rose-400 font-mono text-[10px] uppercase">Opción B: Reportar Bloqueo de Campo</h5>
-                                <p className="text-[9px] text-slate-400">Detenga la ejecución si se presenta alguna condición o carencia insuperable.</p>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowBlockerModal(true)}
-                                  className="w-full py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold font-mono rounded border border-rose-500/30"
-                                >
-                                  ⚠️ Registrar Bloqueo Activo
-                                </button>
+                                <h5 className="font-bold text-rose-400 text-xs">Opción B: Reportar Bloqueo de Campo</h5>
+                                <p className="text-xs text-slate-400">Detenga la ejecución si se presenta alguna condición o carencia insuperable.</p>
+                                <Button variant="danger" fullWidth onClick={() => setShowBlockerModal(true)} icon={<AlertTriangle />}>
+                                  Registrar bloqueo
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -2219,7 +2373,7 @@ export default function VistaTerreno({
                   <div className="space-y-4">
                     <div className="flex justify-between items-center border-b border-slate-900 pb-2">
                       <div>
-                        <h3 className="text-xs font-mono text-slate-500 uppercase">Supervisor de Turno</h3>
+                        <h3 className="text-xs text-slate-500">Supervisor de Turno</h3>
                         <h2 className="text-sm font-bold text-slate-100">Panel de Control Terreno</h2>
                       </div>
                       <Shield className="h-4 w-4 text-cyan-400 animate-pulse" />
@@ -2238,61 +2392,61 @@ export default function VistaTerreno({
                     </div>
 
                     {/* Resumen rápido para Supervisor */}
-                    <div className="grid grid-cols-2 gap-2 text-center text-[10px] font-mono">
+                    <div className="grid grid-cols-2 gap-2 text-center text-xs">
                       <div className="bg-amber-500/10 border border-amber-500/20 p-1.5 rounded-lg">
                         <span className="text-amber-400 font-bold block text-sm">{closureProposalOts.length}</span>
-                        <span className="text-slate-500 text-[8px] uppercase">Por revisar</span>
+                        <span className="text-slate-500 text-xs uppercase">Por revisar</span>
                       </div>
                       <div className="bg-rose-500/10 border border-rose-500/20 p-1.5 rounded-lg">
                         <span className="text-rose-400 font-bold block text-sm">{blockedOts.length}</span>
-                        <span className="text-slate-500 text-[8px] uppercase">Bloqueos</span>
+                        <span className="text-slate-500 text-xs uppercase">Bloqueos</span>
                       </div>
                     </div>
 
                     {/* Lista de propuestas de cierre para el Supervisor */}
                     <div className="space-y-2.5">
-                      <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Propuestas de Cierre</h4>
+                      <h4 className="text-xs text-slate-500">Propuestas de Cierre</h4>
                       {closureProposalOts.map((ot) => (
                         <div key={ot.codigo} className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
                           <div className="flex justify-between items-center">
-                            <span className="text-[9px] font-mono text-slate-500">{ot.codigo}</span>
-                            <span className="text-[9px] font-mono text-cyan-400 bg-cyan-950 px-1.5 rounded">Pendiente</span>
+                            <span className="text-xs font-mono text-slate-500">{ot.codigo}</span>
+                            <span className="text-xs text-cyan-400 bg-cyan-950 px-1.5 rounded">Pendiente</span>
                           </div>
                           <div>
                             <h5 className="font-bold text-slate-200 truncate">{ot.activo}</h5>
-                            <p className="text-[10px] text-slate-400">{ot.plantaNombre}</p>
+                            <p className="text-xs text-slate-400">{ot.plantaNombre}</p>
                           </div>
 
-                          <div className="bg-slate-950 p-2 rounded text-[10px] font-mono border border-slate-900 text-slate-300">
+                          <div className="bg-slate-950 p-2 rounded text-xs border border-slate-900 text-slate-300">
                             <strong>Obs Técnico:</strong> {ot.comentarioPropuestaCierre || 'N/A'}
                           </div>
 
                           {/* Acciones del Supervisor en la OT */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-950 font-mono text-[9px]">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-950 text-xs">
                             <button
                               onClick={() => {
                                 const comm = prompt('Ingrese observaciones técnicas para devolver a ejecución:');
                                 if (comm !== null) handleSupervisorRejectToExecution(ot.codigo, comm);
                               }}
-                              className="py-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 rounded border border-rose-500/30 font-bold"
+                              className={buttonClass('danger')}
                             >
-                              ✕ Devolver
+                              <X className="h-4 w-4" aria-hidden="true" /> Devolver
                             </button>
                             <button
                               onClick={() => {
                                 const comm = prompt('Ingrese comentarios finales de cierre técnico:');
                                 if (comm !== null) handleSupervisorApproveFinalClosure(ot.codigo, comm);
                               }}
-                              className="py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded border border-emerald-500/30 font-bold"
+                              className={buttonClass('primary')}
                             >
-                              ✔ Aprobar Cierre
+                              <Check className="h-4 w-4" aria-hidden="true" /> Aprobar cierre
                             </button>
                           </div>
                         </div>
                       ))}
 
                       {closureProposalOts.length === 0 && (
-                        <div className="text-center py-6 text-[10px] text-slate-600 font-mono border border-dashed border-slate-900 rounded-xl">
+                        <div className="text-center py-6 text-xs text-slate-600 border border-dashed border-slate-900 rounded-xl">
                           No hay propuestas de cierre técnico pendientes de revisión.
                         </div>
                       )}
@@ -2300,15 +2454,15 @@ export default function VistaTerreno({
 
                     {/* Lista de bloqueos activos */}
                     <div className="space-y-2.5 pt-2">
-                      <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Bloqueos de Sitio</h4>
+                      <h4 className="text-xs text-slate-500">Bloqueos de Sitio</h4>
                       {blockedOts.map((ot) => (
                         <div key={ot.codigo} className="bg-slate-900 border border-red-500/20 rounded-xl p-3 space-y-1.5 text-xs bg-red-950/5">
-                          <div className="flex justify-between items-center text-[9px] font-mono">
+                          <div className="flex justify-between items-center text-xs font-mono">
                             <span className="text-slate-500">{ot.codigo}</span>
                             <span className="text-red-400 font-bold">BLOQUEADA</span>
                           </div>
                           <h5 className="font-bold text-slate-200 truncate">{ot.activo}</h5>
-                          <p className="text-[10px] text-red-300 font-mono italic leading-tight">
+                          <p className="text-xs text-red-300 italic leading-tight">
                             Motivo: {ot.motivoBloqueo}
                           </p>
                           <div className="pt-2">
@@ -2317,15 +2471,15 @@ export default function VistaTerreno({
                                 const mot = prompt('Ingrese el detalle del escalamiento formal:');
                                 if (mot) handleSupervisorEscalate(ot.codigo, mot);
                               }}
-                              className="w-full py-1 bg-red-500/15 hover:bg-red-500/25 text-red-400 font-mono text-[9px] rounded border border-red-500/30"
+                              className={buttonClass('danger', 'md', 'w-full')}
                             >
-                              🛡️ Escalar a Coordinador O&M
+                              <Shield className="h-4 w-4" aria-hidden="true" /> Escalar a Coordinador O&M
                             </button>
                           </div>
                         </div>
                       ))}
                       {blockedOts.length === 0 && (
-                        <div className="text-center py-6 text-[10px] text-slate-600 font-mono border border-dashed border-slate-900 rounded-xl">
+                        <div className="text-center py-6 text-xs text-slate-600 border border-dashed border-slate-900 rounded-xl">
                           No hay bloqueos activos reportados desde terreno.
                         </div>
                       )}
@@ -2334,10 +2488,11 @@ export default function VistaTerreno({
                 )}
               </div>
 
-              {/* Home / Touch Bar inferior del Celular */}
-              <div className="py-2.5 flex justify-center items-center bg-slate-900/20 border-t border-slate-900 shrink-0">
+              {/* Home / Touch Bar inferior del Celular (solo en el teléfono dibujado del PC) */}
+              <div className="py-2.5 hidden sm:flex justify-center items-center bg-slate-900/20 border-t border-slate-900 shrink-0">
                 <button
                   onClick={() => setSelectedOt(null)}
+                  aria-label="Volver a la bandeja"
                   className="h-10 w-10 rounded-full border border-slate-800 bg-slate-950 flex items-center justify-center hover:border-emerald-500/30 transition-all shadow"
                 >
                   <div className="h-3 w-3 bg-slate-800 rounded"></div>
@@ -2349,7 +2504,7 @@ export default function VistaTerreno({
         </div>
 
         {/* COLUMNA 2: DETALLES, AUDITORÍA DE CAMPO Y PANEL DE COMPLIANCE (8 COLS) */}
-        <div className="lg:col-span-7 xl:col-span-8 space-y-6">
+        <div className="hidden sm:block lg:col-span-7 xl:col-span-8 space-y-6">
           
           {/* Bento-grid de simulación del Dispositivo e Integridad de Datos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2364,14 +2519,14 @@ export default function VistaTerreno({
                 Configure las condiciones simuladas del terminal del operario en terreno para comprobar la resiliencia offline de ORBI.
               </p>
 
-              <div className="space-y-3 font-mono text-xs">
+              <div className="space-y-3 text-xs">
                 {/* Conectividad de Red */}
                 <div className="flex justify-between items-center p-2.5 bg-slate-950 rounded-lg border border-slate-850">
                   <span>Enlace de Datos Movil</span>
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => setIsOnline(true)}
-                      className={`px-3 py-1 rounded text-[10px] font-bold ${
+                      className={`px-3 py-1 rounded text-xs font-bold ${
                         isOnline ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-500 border border-slate-800'
                       }`}
                     >
@@ -2379,7 +2534,7 @@ export default function VistaTerreno({
                     </button>
                     <button
                       onClick={() => setIsOnline(false)}
-                      className={`px-3 py-1 rounded text-[10px] font-bold ${
+                      className={`px-3 py-1 rounded text-xs font-bold ${
                         !isOnline ? 'bg-rose-500 text-white' : 'bg-slate-900 text-slate-500 border border-slate-800'
                       }`}
                     >
@@ -2394,7 +2549,7 @@ export default function VistaTerreno({
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => setGpsLocked(true)}
-                      className={`px-3 py-1 rounded text-[10px] font-bold ${
+                      className={`px-3 py-1 rounded text-xs font-bold ${
                         gpsLocked ? 'bg-cyan-500 text-slate-950' : 'bg-slate-900 text-slate-500 border border-slate-800'
                       }`}
                     >
@@ -2402,7 +2557,7 @@ export default function VistaTerreno({
                     </button>
                     <button
                       onClick={() => setGpsLocked(false)}
-                      className={`px-3 py-1 rounded text-[10px] font-bold ${
+                      className={`px-3 py-1 rounded text-xs font-bold ${
                         !gpsLocked ? 'bg-rose-500 text-white' : 'bg-slate-900 text-slate-500 border border-slate-800'
                       }`}
                     >
@@ -2425,19 +2580,19 @@ export default function VistaTerreno({
 
               <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-850">
-                  <span className="text-[10px] font-mono text-slate-500 block uppercase">Porcentaje Checklist</span>
-                  <span className="text-2xl font-bold text-white font-mono">
+                  <span className="text-xs text-slate-500 block">Porcentaje Checklist</span>
+                  <span className="text-2xl font-bold text-white">
                     {Math.round(ots.reduce((acc, curr) => acc + (curr.avance || 0), 0) / ots.length)}%
                   </span>
-                  <span className="text-[9px] text-emerald-400 block mt-1">Avance consolidado</span>
+                  <span className="text-xs text-emerald-400 block mt-1">Avance consolidado</span>
                 </div>
 
                 <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-850">
-                  <span className="text-[10px] font-mono text-slate-500 block uppercase">Con Evidencias</span>
-                  <span className="text-2xl font-bold text-indigo-400 font-mono">
+                  <span className="text-xs text-slate-500 block">Con Evidencias</span>
+                  <span className="text-2xl font-bold text-indigo-400">
                     {ots.filter(o => o.evidencePack && o.evidencePack.length > 0).length}
                   </span>
-                  <span className="text-[9px] text-indigo-300 block mt-1">Órdenes auditadas</span>
+                  <span className="text-xs text-indigo-300 block mt-1">Órdenes auditadas</span>
                 </div>
               </div>
             </div>
@@ -2457,7 +2612,7 @@ export default function VistaTerreno({
               A continuación se listan las transacciones enviadas por los terminales móviles en terreno a la base central inmutable de ORBI.
             </p>
 
-            <div className="bg-slate-950 border border-slate-850 rounded-xl p-4 font-mono text-[11px] leading-relaxed space-y-3 max-h-[220px] overflow-y-auto">
+            <div className="bg-slate-950 border border-slate-850 rounded-xl p-4 text-sm leading-relaxed space-y-3 max-h-[220px] overflow-y-auto">
               {ots.map((ot) => {
                 const logs: any[] = [];
                 if (ot.llegadaConfirmada) {
@@ -2500,7 +2655,7 @@ export default function VistaTerreno({
               }).flat().sort((a,b) => b.fecha.localeCompare(a.fecha)).map((log, idx) => (
                 <div key={idx} className="flex gap-2 items-start border-b border-slate-900 pb-2.5 last:border-0 last:pb-0">
                   <span className="text-slate-500 shrink-0">{log.fecha}</span>
-                  <span className={`px-1.5 py-0.2 rounded shrink-0 font-bold text-[9px] uppercase ${
+                  <span className={`px-1.5 py-0.2 rounded shrink-0 font-bold text-xs uppercase ${
                     log.tag === 'BLOQUEO' ? 'bg-red-500/15 text-red-400 border border-red-500/25' :
                     log.tag === 'CHECK-IN' ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/25' :
                     log.tag === 'AST-LOTO' ? 'bg-rose-500/15 text-rose-400 border border-rose-500/25' :
@@ -2548,7 +2703,7 @@ export default function VistaTerreno({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-[10px] font-mono text-slate-500 uppercase block">Tipo de Bloqueo</label>
+                <label className="text-xs text-slate-500 block">Tipo de Bloqueo</label>
                 <select
                   value={blockerType}
                   onChange={(e) => setBlockerType(e.target.value)}
@@ -2565,7 +2720,7 @@ export default function VistaTerreno({
               </div>
 
               <div>
-                <label className="text-[10px] font-mono text-slate-500 uppercase block">Justificación Técnica</label>
+                <label className="text-xs text-slate-500 block">Justificación Técnica</label>
                 <textarea
                   rows={3}
                   placeholder="Justifique el motivo detalladamente..."
@@ -2576,7 +2731,7 @@ export default function VistaTerreno({
               </div>
             </div>
 
-            <div className="flex gap-2.5 justify-end font-mono text-xs pt-2">
+            <div className="flex gap-2.5 justify-end text-xs pt-2">
               <button
                 onClick={() => setShowBlockerModal(false)}
                 className="px-4 py-2 bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-750"

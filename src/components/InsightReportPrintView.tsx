@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { notify } from './Toaster';
 import { 
   FileText, 
   Printer, 
@@ -28,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Planta, OT, HSEFinding, PlanPreventivo } from '../types';
 import { getBIWorkOrderRecords, BIWorkOrderRecord } from '../data/biDataBridge';
+import { softwrenchCodeOf } from '../domain/otStateMachine';
 
 interface InsightReportPrintViewProps {
   reportType: 'ejecutivo' | 'cliente' | 'zona' | 'planta' | 'hh' | 'mensual';
@@ -108,7 +110,14 @@ export default function InsightReportPrintView({
 
   // Calculate high fidelity statistics
   const totalWO = filteredRecords.length;
-  const closedWO = filteredRecords.filter(r => r.estado === 'Cerrada' || r.estado === 'Ejecutada' || r.estado === 'En Revisión').length;
+  // 17A: agrupación por códigos SoftWrench (antes usaba estados inexistentes y porcentajes fijos)
+  const swCode = (r: BIWorkOrderRecord) => softwrenchCodeOf(r.estado);
+  const countCerradas = filteredRecords.filter(r => swCode(r) === 'CLOSED').length;
+  const countEjecutadas = filteredRecords.filter(r => swCode(r) === 'FDCOMP' || swCode(r) === 'RSALOR').length;
+  const countEnCampo = filteredRecords.filter(r => ['RTBSCH', 'DAPPR', 'INPROG', 'HOLD'].includes(swCode(r) || '')).length;
+  const countDevueltas = filteredRecords.filter(r => r.estado === 'Devuelta a ejecución' || r.estado === 'Reabierta').length;
+  const pct = (n: number) => (filteredRecords.length > 0 ? Math.round((n / filteredRecords.length) * 100) : 0);
+  const closedWO = countCerradas + countEjecutadas;
   const pendingWO = totalWO - closedWO;
   const complianceRate = totalWO > 0 ? Math.round((closedWO / totalWO) * 100) : 100;
   
@@ -144,7 +153,7 @@ MÉTRICAS PRINCIPALES:
 =========================================
 `;
     navigator.clipboard.writeText(summaryText);
-    alert('Resumen del reporte copiado al portapapeles con éxito.');
+    notify('Resumen del reporte copiado al portapapeles con éxito.');
   };
 
   return (
@@ -461,40 +470,40 @@ MÉTRICAS PRINCIPALES:
                     <div>
                       <div className="flex justify-between text-xs font-mono text-slate-300 print:text-slate-800 mb-1">
                         <span>Cerradas (Auditoría Documental Sandbox)</span>
-                        <span>{filteredRecords.filter(r => r.estado === 'Cerrada').length} (55%)</span>
+                        <span>{countCerradas} ({pct(countCerradas)}%)</span>
                       </div>
                       <div className="w-full bg-slate-900 rounded-full h-2 print:bg-slate-200">
-                        <div className="bg-indigo-600 h-2 rounded-full" style={{ width: '55%' }}></div>
+                        <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${pct(countCerradas)}%` }}></div>
                       </div>
                     </div>
                     
                     <div>
                       <div className="flex justify-between text-xs font-mono text-slate-300 print:text-slate-800 mb-1">
                         <span>Ejecutadas (En Revisión Técnica)</span>
-                        <span>{filteredRecords.filter(r => r.estado === 'Ejecutada' || r.estado === 'En Revisión').length} (30%)</span>
+                        <span>{countEjecutadas} ({pct(countEjecutadas)}%)</span>
                       </div>
                       <div className="w-full bg-slate-900 rounded-full h-2 print:bg-slate-200">
-                        <div className="bg-emerald-500 h-2 rounded-full" style={{ width: '30%' }}></div>
+                        <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${pct(countEjecutadas)}%` }}></div>
                       </div>
                     </div>
 
                     <div>
                       <div className="flex justify-between text-xs font-mono text-slate-300 print:text-slate-800 mb-1">
                         <span>Asignadas / En Proceso (Campo)</span>
-                        <span>{filteredRecords.filter(r => r.estado === 'En Proceso' || r.estado === 'Asignada').length} (10%)</span>
+                        <span>{countEnCampo} ({pct(countEnCampo)}%)</span>
                       </div>
                       <div className="w-full bg-slate-900 rounded-full h-2 print:bg-slate-200">
-                        <div className="bg-amber-400 h-2 rounded-full" style={{ width: '10%' }}></div>
+                        <div className="bg-amber-400 h-2 rounded-full" style={{ width: `${pct(countEnCampo)}%` }}></div>
                       </div>
                     </div>
 
                     <div>
                       <div className="flex justify-between text-xs font-mono text-slate-300 print:text-slate-800 mb-1">
                         <span>Con Observaciones / Rechazadas</span>
-                        <span>{filteredRecords.filter(r => r.estado === 'Rechazada').length} (5%)</span>
+                        <span>{countDevueltas} ({pct(countDevueltas)}%)</span>
                       </div>
                       <div className="w-full bg-slate-900 rounded-full h-2 print:bg-slate-200">
-                        <div className="bg-rose-500 h-2 rounded-full" style={{ width: '5%' }}></div>
+                        <div className="bg-rose-500 h-2 rounded-full" style={{ width: `${pct(countDevueltas)}%` }}></div>
                       </div>
                     </div>
                   </div>
@@ -1075,7 +1084,7 @@ MÉTRICAS PRINCIPALES:
             <div className="h-0.5 bg-slate-800 w-36 mx-auto print:bg-slate-300"></div>
             <div>
               <p className="font-bold text-white print:text-slate-950">Gerencia de Operaciones O&amp;M</p>
-              <p className="text-[10px] text-slate-400 print:text-slate-500 font-mono">ORBI O&amp;M Command Center</p>
+              <p className="text-[10px] text-slate-400 print:text-slate-500 font-mono">ORBI O&amp;M Work Center</p>
               <p className="text-[9px] text-emerald-400 print:text-emerald-600 font-mono mt-1">✓ Validado en Report Center</p>
             </div>
           </div>

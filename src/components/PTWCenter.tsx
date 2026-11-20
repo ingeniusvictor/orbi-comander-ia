@@ -4,6 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { notify } from './Toaster';
+import { api, isNetworkError } from '../data/serverSync';
 import {
   FileText,
   Search,
@@ -141,7 +143,7 @@ export default function PTWCenter({
   const handleSelectPrimaryOtInForm = (otCodigo: string) => {
     const selectedOtObj = ots.find(ot => ot.codigo === otCodigo);
     if (selectedOtObj) {
-      const suggestedCode = `PTS-${selectedOtObj.plantaNombre.substring(0, 4).toUpperCase().replace(/\s+/g, '')}-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+      // 17E: el número del permiso ya no se inventa aquí: lo entrega el servidor al guardar
       
       // Obtener técnicos sugeridos de la OT
       const techList = selectedOtObj.tecnicoAsignado && selectedOtObj.tecnicoAsignado !== 'No asignado'
@@ -152,8 +154,8 @@ export default function PTWCenter({
 
       setNewPtw(prev => ({
         ...prev,
-        codigo: suggestedCode,
-        id: suggestedCode,
+        codigo: '',
+        id: '',
         plantaId: selectedOtObj.plantaId,
         plantaNombre: selectedOtObj.plantaNombre,
         tipoTrabajo: selectedOtObj.tipo === 'Preventiva' ? 'Mantenimiento Preventivo' : 'Mantenimiento Correctivo',
@@ -164,7 +166,7 @@ export default function PTWCenter({
         alcance: selectedOtObj.observaciones || '',
         tecnicos: techList,
         requiereAST: selectedOtObj.requiereAST !== undefined ? selectedOtObj.requiereAST : true,
-        astAsociadoId: selectedOtObj.requiereAST ? `AST-${selectedOtObj.plantaNombre.substring(0, 4).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}` : ''
+        astAsociadoId: ''
       }));
 
       setSelectedOtsInForm([otCodigo]);
@@ -189,16 +191,35 @@ export default function PTWCenter({
     }));
   };
 
-  // Crear permiso mock
-  const handleSavePtw = () => {
-    if (!newPtw.codigo || !newPtw.plantaId || selectedOtsInForm.length === 0) {
-      alert('Por favor complete los campos obligatorios: Código de Permiso, Planta y al menos 1 OT vinculada.');
+  // 17E: crear el permiso con su número oficial (portal O&M) o el contador local del servidor
+  const [guardandoPtw, setGuardandoPtw] = useState(false);
+  const handleSavePtw = async () => {
+    if (!newPtw.plantaId || selectedOtsInForm.length === 0) {
+      notify('Completa la planta y al menos una OT vinculada.');
+      return;
+    }
+    setGuardandoPtw(true);
+    let numero: { codigo: string; fuente: 'portal' | 'local' };
+    try {
+      numero = await api('/ptw/numero', {
+        method: 'POST',
+        body: JSON.stringify({ plantaId: newPtw.plantaId, otCodigos: selectedOtsInForm, tecnicos: newPtw.tecnicos, fechaInicio: newPtw.fechaInicio, fechaFin: newPtw.fechaFin }),
+      });
+    } catch (error) {
+      notify(isNetworkError(error) ? 'Se necesita señal para obtener el número del permiso. Inténtalo de nuevo con conexión.' : `No se pudo obtener el número del permiso: ${(error as Error).message}`);
+      return;
+    } finally {
+      setGuardandoPtw(false);
+    }
+    if (ptws.some(p => p.codigo === numero.codigo)) {
+      notify(`El número ${numero.codigo} ya existe en ORBI. Avisa a administración antes de continuar.`);
       return;
     }
 
     const ptwRecord: PTW = {
-      id: newPtw.codigo,
-      codigo: newPtw.codigo,
+      id: numero.codigo,
+      codigo: numero.codigo,
+      numeracion: numero.fuente,
       otCodigos: selectedOtsInForm,
       tecnicos: newPtw.tecnicos && newPtw.tecnicos.length > 0 ? newPtw.tecnicos : ['Personal de Terreno'],
       plantaId: newPtw.plantaId,
@@ -211,7 +232,7 @@ export default function PTWCenter({
       alcance: newPtw.alcance || 'Alcance de trabajos',
       observaciones: newPtw.observaciones || '',
       requiereAST: !!newPtw.requiereAST,
-      astAsociadoId: newPtw.astAsociadoId || '',
+      astAsociadoId: newPtw.astAsociadoId || (newPtw.requiereAST ? `${numero.codigo}-AST` : ''),
       astAsociadoComentario: newPtw.astAsociadoComentario || '',
       estado: 'Pendiente apertura', // Por defecto directo a pendiente de firmas de apertura
       creadoPor: activeUserName,
@@ -239,7 +260,7 @@ export default function PTWCenter({
       'PTW Center',
       selectedOtsInForm[0],
       ptwRecord.plantaNombre,
-      `Se creó el permiso de trabajo mock ${ptwRecord.codigo} asociado a las OTs: ${selectedOtsInForm.join(', ')}`,
+      `Se creó el permiso de trabajo ${ptwRecord.codigo} (${numero.fuente === 'portal' ? 'numeración oficial' : 'numeración local'}) asociado a las OTs: ${selectedOtsInForm.join(', ')}`,
       'Media'
     );
 
@@ -300,7 +321,7 @@ export default function PTWCenter({
   // Acciones de firmas en el visualizador (Mock)
   const handleSignOpeningTech = (ptw: PTW) => {
     if (!techSignatureName.trim()) {
-      alert('Por favor ingrese el nombre para firmar.');
+      notify('Por favor ingrese el nombre para firmar.');
       return;
     }
     const updated = ptws.map(p => {
@@ -345,7 +366,7 @@ export default function PTWCenter({
 
   const handleSignOpeningSupervisor = (ptw: PTW) => {
     if (!supSignatureName.trim()) {
-      alert('Por favor ingrese el nombre para firmar.');
+      notify('Por favor ingrese el nombre para firmar.');
       return;
     }
     const updated = ptws.map(p => {
@@ -388,7 +409,7 @@ export default function PTWCenter({
 
   const handleSignClosingTech = (ptw: PTW) => {
     if (!techSignatureName.trim()) {
-      alert('Por favor ingrese el nombre para firmar.');
+      notify('Por favor ingrese el nombre para firmar.');
       return;
     }
     const updated = ptws.map(p => {
@@ -480,10 +501,6 @@ export default function PTWCenter({
       {/* TÍTULO PRINCIPAL DE LA VISTA */}
       <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded border border-emerald-500/20 uppercase">MÓDULO 5 — PTW Center</span>
-            <span className="text-xs font-mono text-slate-500">Tritec-Intervento O&amp;M Standard</span>
-          </div>
           <h2 className="text-xl font-bold text-white mt-1 flex items-center gap-2">
             <ShieldAlert className="h-5.5 w-5.5 text-emerald-400" /> PTW Center — Permisos de Trabajo Seguro
           </h2>
@@ -497,7 +514,7 @@ export default function PTWCenter({
             onClick={() => setIsCreating(true)}
             className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold font-mono text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-lg"
           >
-            <PlusCircle className="h-4 w-4" /> Crear PTS Mock
+            <PlusCircle className="h-4 w-4" /> Crear permiso de trabajo
           </button>
         )}
       </div>
@@ -966,7 +983,7 @@ export default function PTWCenter({
                       <strong className="text-slate-950 font-bold">{selectedPtw.requiereAST ? 'SÍ (OBLIGATORIO)' : 'NO'}</strong>
                       {selectedPtw.requiereAST && (
                         <div className="mt-1 bg-white p-1.5 rounded border border-slate-200 text-[8.5px] font-mono leading-tight">
-                          <div>AST ID: {selectedPtw.astAsociadoId || 'AST-AUTO-GEN'}</div>
+                          <div>AST ID: {selectedPtw.astAsociadoId || '—'}</div>
                           {selectedPtw.astAsociadoComentario && <div className="text-slate-500 mt-0.5">{selectedPtw.astAsociadoComentario}</div>}
                         </div>
                       )}
@@ -1094,7 +1111,7 @@ export default function PTWCenter({
             >
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
                 <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Plus className="h-4 w-4 text-emerald-400" /> Crear Nuevo Permiso de Trabajo (PTS) Mock
+                  <Plus className="h-4 w-4 text-emerald-400" /> Crear nuevo permiso de trabajo (PTS)
                 </h3>
                 <button
                   onClick={() => setIsCreating(false)}
@@ -1143,7 +1160,7 @@ export default function PTWCenter({
                   </div>
                 </div>
 
-                {newPtw.codigo && (
+                {newPtw.plantaId && (
                   <>
                     {/* CÓDIGO & TIPO */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1157,13 +1174,10 @@ export default function PTWCenter({
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-500 block mb-1">CÓDIGO DE PTS *</label>
-                        <input
-                          type="text"
-                          value={newPtw.codigo || ''}
-                          onChange={e => setNewPtw(prev => ({ ...prev, codigo: e.target.value, id: e.target.value }))}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white outline-none focus:border-emerald-500/50 font-bold"
-                        />
+                        <span className="text-[10px] text-slate-500 block mb-1">NÚMERO DEL PERMISO</span>
+                        <p className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-sm text-slate-300">
+                          Se asigna al guardar, con la numeración oficial (o la del servidor si el portal O&M aún no está conectado).
+                        </p>
                       </div>
                     </div>
 
@@ -1327,11 +1341,11 @@ export default function PTWCenter({
                   Cancelar
                 </button>
                 <button
-                  disabled={!newPtw.codigo || !newPtw.plantaId || selectedOtsInForm.length === 0}
-                  onClick={handleSavePtw}
+                  disabled={guardandoPtw || !newPtw.plantaId || selectedOtsInForm.length === 0}
+                  onClick={() => { void handleSavePtw(); }}
                   className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-slate-950 font-bold font-mono text-xs rounded-lg transition-all"
                 >
-                  ✓ Generar PTS y Enviar a Terreno
+                  {guardandoPtw ? 'Obteniendo número…' : 'Crear permiso y enviar a terreno'}
                 </button>
               </div>
             </motion.div>

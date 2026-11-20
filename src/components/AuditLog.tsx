@@ -55,7 +55,7 @@ export default function AuditLog({ logs, onRefresh }: AuditLogProps) {
       <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <ClipboardList className="h-5.5 w-5.5 text-indigo-400" /> ORBI Audit Log
+            <ClipboardList className="h-5.5 w-5.5 text-indigo-400" /> Registro de Auditoría
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Trazabilidad completa e inmutable de eventos operacionales, decisiones de Jefatura y asignación de recursos en terreno.

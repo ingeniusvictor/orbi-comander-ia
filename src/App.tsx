@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Layers,
   Users,
@@ -80,29 +80,73 @@ import {
   loadPtws,
   savePtws
 } from './data/db';
+import { STORAGE_ERROR_EVENT } from './data/storage';
+import ErrorBoundary from './components/ErrorBoundary';
+import LoginScreen from './components/LoginScreen';
+import {
+  getSession, logout, bootstrapCollections, pollCollections, fetchOTs, fetchAudit, postAudit, initOutbox, processOutbox,
+  queueOTChanges, hasPendingOT, setServerOTListener, clearLocalMirrorAndReload, ApiError, SYNC_EVENTS, type SessionInfo,
+  initCollectionSync, cacheSession, cachedSession, cacheOTs, cachedOTs, isNetworkError, setPhotosResolvedListener, refreshQueuedPhotoCount,
+  resetLocalDataIfUserChanged, clearOTCache,
+} from './data/serverSync';
+import { warmPreviews, replacePlaceholders } from './data/photoQueue';
 
-// Importar Vistas Operacionales
-import HomeEjecutivo from './components/HomeEjecutivo';
-import Organigrama from './components/Organigrama';
-import Zonas from './components/Zonas';
-import MatrizPlantas from './components/MatrizPlantas';
-import OTManager from './components/OTManager';
-import VistaTerreno from './components/VistaTerreno';
-import HSECalidad from './components/HSECalidad';
-import Workspace from './components/Workspace';
-import InsightCenter from './components/InsightCenter';
+// 17A UX P2: cada módulo se descarga cuando se abre (el técnico ya no baja los 22 módulos al entrar)
+const HomeEjecutivo = lazy(() => import('./components/HomeEjecutivo'));
+const Organigrama = lazy(() => import('./components/Organigrama'));
+const Zonas = lazy(() => import('./components/Zonas'));
+const MatrizPlantas = lazy(() => import('./components/MatrizPlantas'));
+const OTManager = lazy(() => import('./components/OTManager'));
+const VistaTerreno = lazy(() => import('./components/VistaTerreno'));
+const HSECalidad = lazy(() => import('./components/HSECalidad'));
+const Workspace = lazy(() => import('./components/Workspace'));
+const InsightCenter = lazy(() => import('./components/InsightCenter'));
+const OrbiFleetStandaloneShell = lazy(() => import('./features/fleet/app/OrbiFleetStandaloneShell'));
+const PeopleResource = lazy(() => import('./components/PeopleResource'));
+const RepuestosHerramientas = lazy(() => import('./components/RepuestosHerramientas'));
+const EscalationCenter = lazy(() => import('./components/EscalationCenter'));
+const AuditLog = lazy(() => import('./components/AuditLog'));
+const FotonPrime = lazy(() => import('./components/FotonPrime'));
+const PTWCenter = lazy(() => import('./components/PTWCenter'));
+const DemoReadiness = lazy(() => import('./components/DemoReadiness'));
+const ExecutiveDemoHub = lazy(() => import('./components/ExecutiveDemoHub'));
+const CmmsMaestros = lazy(() => import('./components/CmmsMaestros'));
 
-// Nuevas Vistas del Parche v0.1.1C
-import FlotaLogistica from './components/FlotaLogistica';
-import OrbiFleetStandaloneShell from './features/fleet/app/OrbiFleetStandaloneShell';
-import PeopleResource from './components/PeopleResource';
-import RepuestosHerramientas from './components/RepuestosHerramientas';
-import EscalationCenter from './components/EscalationCenter';
-import AuditLog from './components/AuditLog';
-import FotonPrime from './components/FotonPrime';
-import PTWCenter from './components/PTWCenter';
-import DemoReadiness from './components/DemoReadiness';
-import ExecutiveDemoHub from './components/ExecutiveDemoHub';
+/**
+ * Descarga anticipada en segundo plano (cuando el teléfono está libre): así los módulos quedan
+ * guardados por el service worker y se pueden abrir después sin señal.
+ */
+function prefetchModules(role: string) {
+  const loaders: (() => Promise<unknown>)[] = role === 'TECNICO_OM'
+    ? [() => import('./components/VistaTerreno')]
+    : [
+        () => import('./components/VistaTerreno'), () => import('./components/OTManager'), () => import('./components/Workspace'),
+        () => import('./components/CmmsMaestros'), () => import('./components/HomeEjecutivo'), () => import('./components/InsightCenter'),
+        () => import('./components/PTWCenter'), () => import('./components/HSECalidad'), () => import('./components/EscalationCenter'),
+      ];
+  const run = () => loaders.forEach(load => { load().catch(() => { /* sin señal: se intentará al abrirlo */ }); });
+  const idle = (window as unknown as { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback;
+  if (idle) idle(run); else setTimeout(run, 2000);
+}
+
+/** Reloj de la cabecera con su propio estado: antes re-dibujaba toda la app cada segundo. */
+function Reloj() {
+  const [ahora, setAhora] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setAhora(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return <span>{ahora.toLocaleString('es-CL', { hour12: false, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>;
+}
+
+function CargandoModulo() {
+  return (
+    <div role="status" className="flex items-center justify-center gap-2 py-24 text-sm text-slate-400">
+      <span className="h-4 w-4 rounded-full border-2 border-slate-600 border-t-emerald-400 animate-spin" aria-hidden="true" />
+      Cargando…
+    </div>
+  );
+}
 
 export default function App() {
   // Bases de datos reactivas
@@ -132,42 +176,223 @@ export default function App() {
 
   // Menú lateral móvil
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsSidebarOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSidebarOpen]);
 
   // Hora del sistema (Estática de la telemetría O&M o dinámica)
-  const [systemTime, setSystemTime] = useState<string>('');
 
-  // 1. Inicialización y carga de bases de datos persistentes
+  // 17A: fallas de almacenamiento visibles para el usuario
+  const [storageError, setStorageError] = useState<string | null>(null);
   useEffect(() => {
+    const onStorageError = (e: Event) => setStorageError((e as CustomEvent<string>).detail);
+    window.addEventListener(STORAGE_ERROR_EVENT, onStorageError);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onStorageError);
+  }, []);
+
+  // 17A Fase 1: sesión real y datos compartidos desde el servidor
+  const [authState, setAuthState] = useState<'loading' | 'login' | 'change-password' | 'offline' | 'ready'>('loading');
+  const [pendingSync, setPendingSync] = useState<number>(0);
+  const otsRef = useRef<OT[]>([]);
+  useEffect(() => { otsRef.current = ots; }, [ots]);
+
+  const loadLocalCollections = () => {
     setOrganigrama(loadOrganigrama());
     setPlantas(loadPlantas());
-    setOts(loadOTs());
     setFindings(loadHSECalidad());
     setPlanificacion(loadPlanificacion());
-
-    // Carga de nuevas tablas v0.1.1C
     setVehiculos(loadVehiculos());
     setRecursosPersonas(loadRecursosPersonas());
     setRepuestos(loadRepuestos());
     setHerramientas(loadHerramientas());
-    setAuditLogs(loadAuditLog());
     setEscalaciones(loadEscalaciones());
     setPtws(loadPtws());
+  };
 
-    const savedRole = getActiveRole();
-    setUserRole(savedRole);
-    setUserName(getActiveUserName());
+  // 17A Fase 3: trabajar sin señal con la copia guardada en el equipo
+  const [isOffline, setIsOffline] = useState<boolean>(typeof navigator !== 'undefined' && navigator.onLine === false);
 
-    // Hora de sistema formateada
-    const updateTime = () => {
-      const now = new Date();
-      setSystemTime(now.toLocaleString('es-CL', { hour12: false }));
+  const startOffline = (): boolean => {
+    const info = cachedSession();
+    if (!info || info.mustChangePassword) return false;
+    setUserRole(info.user.role);
+    setUserName(info.user.displayName);
+    initOutbox();
+    initCollectionSync();
+    loadLocalCollections();
+    setOts(cachedOTs());
+    // Misma vista de inicio que con señal (el técnico va directo a Vista Terreno)
+    const suggested = ROLES_CONFIG[info.user.role]?.suggestedView;
+    if (suggested) setActiveView(suggested);
+    void warmPreviews().then(refreshQueuedPhotoCount);
+    setIsOffline(true);
+    setAuthState('ready');
+    return true;
+  };
+
+  const startSession = async (session?: SessionInfo) => {
+    try {
+      const info = session ?? await getSession();
+      if (info.mustChangePassword) {
+        setAuthState('change-password');
+        return;
+      }
+      const descartados = await resetLocalDataIfUserChanged(info.user.id);
+      if (descartados > 0) {
+        setStorageError(`Se descartaron ${descartados} cambio(s) sin enviar de otro usuario que usó este equipo.`);
+      }
+      cacheSession(info);
+      setUserRole(info.user.role);
+      setUserName(info.user.displayName);
+      initOutbox();
+      void warmPreviews().then(refreshQueuedPhotoCount);
+      await bootstrapCollections();
+      loadLocalCollections();
+      const serverOts = await fetchOTs();
+      // Las OTs con cambios aún sin enviar conservan la versión local
+      setOts(prev => {
+        const serverCodes = new Set(serverOts.map(o => o.codigo));
+        const merged = serverOts.map(o => (hasPendingOT(o.codigo) ? prev.find(p => p.codigo === o.codigo) ?? o : o));
+        return [...merged, ...prev.filter(p => !serverCodes.has(p.codigo) && hasPendingOT(p.codigo))];
+      });
+      setAuditLogs(await fetchAudit());
+      const suggested = ROLES_CONFIG[info.user.role]?.suggestedView;
+      if (suggested) setActiveView(suggested);
+      setIsOffline(false);
+      setAuthState('ready');
+      void processOutbox();
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.body?.code === 'MUST_CHANGE_PASSWORD')) {
+        setAuthState(error.status === 401 ? 'login' : 'change-password');
+      } else if (!startOffline()) {
+        setAuthState('offline');
+      }
+    }
+  };
+
+  // Copia de trabajo de las OTs en el equipo, para poder abrir la app sin señal.
+  // 17A UX P2: se guarda 800 ms después del último cambio (antes, en cada cambio, bloqueando el teléfono)
+  // y de inmediato si la app pasa a segundo plano o se cierra.
+  const otsParaCache = useRef<OT[]>([]);
+  useEffect(() => {
+    if (authState !== 'ready') return;
+    otsParaCache.current = ots;
+    const t = setTimeout(() => cacheOTs(ots), 800);
+    return () => clearTimeout(t);
+  }, [ots, authState]);
+  useEffect(() => {
+    if (authState !== 'ready') return;
+    const flush = () => cacheOTs(otsParaCache.current);
+    const onHidden = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHidden);
+    prefetchModules(userRole);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHidden);
     };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
+  }, [authState]);
+
+  useEffect(() => {
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('offline', goOffline);
+    return () => window.removeEventListener('offline', goOffline);
   }, []);
 
-  // Helper para registro inmutable en ORBI Audit Log
+  useEffect(() => {
+    // Al subir fotos tomadas sin señal, las OTs pasan a apuntar a la foto definitiva
+    setPhotosResolvedListener((resolved) => {
+      setOts(prev => prev.map(o => {
+        const json = JSON.stringify(o);
+        return [...resolved.keys()].some(k => json.includes(k)) ? JSON.parse(replacePlaceholders(json, resolved)) : o;
+      }));
+    });
+    setServerOTListener((serverOt) => {
+      setOts(prev => (prev.some(o => o.codigo === serverOt.codigo)
+        ? prev.map(o => (o.codigo === serverOt.codigo ? serverOt : o))
+        : [...prev, serverOt]));
+    });
+    const onAuth = () => setAuthState('login');
+    const onPending = (e: Event) => setPendingSync(Number((e as CustomEvent<number>).detail) || 0);
+    const onCollections = () => loadLocalCollections();
+    window.addEventListener(SYNC_EVENTS.AUTH_REQUIRED, onAuth);
+    window.addEventListener(SYNC_EVENTS.PENDING_CHANGED, onPending);
+    window.addEventListener(SYNC_EVENTS.COLLECTIONS_UPDATED, onCollections);
+    void startSession();
+
+    // Hora de sistema formateada
+    return () => {
+      window.removeEventListener(SYNC_EVENTS.AUTH_REQUIRED, onAuth);
+      window.removeEventListener(SYNC_EVENTS.PENDING_CHANGED, onPending);
+      window.removeEventListener(SYNC_EVENTS.COLLECTIONS_UPDATED, onCollections);
+    };
+  }, []);
+
+  // Traer cambios de otros usuarios cada 20 s, al volver a la pestaña y al recuperar señal
+  useEffect(() => {
+    if (authState !== 'ready') return;
+    const refresh = async () => {
+      try {
+        // Si la sesión se abrió sin señal, al volver la conexión se completa la carga desde el servidor
+        if (isOffline) {
+          await getSession();
+          await pollCollections();
+        }
+        // (un 401 aquí lleva a iniciar sesión; ver catch)
+        await processOutbox();
+        const serverOts = await fetchOTs();
+        setIsOffline(false);
+        setOts(prev => {
+          const byCode = new Map<string, OT>(prev.map(o => [o.codigo, o]));
+          const serverCodes = new Set(serverOts.map(o => o.codigo));
+          const merged = serverOts.map(o => {
+            const local = byCode.get(o.codigo);
+            if (local && hasPendingOT(o.codigo)) return local;
+            // misma versión o la local es más nueva (respuesta llegó antes que esta lectura): se conserva
+            if (local && typeof local._version === 'number' && typeof o._version === 'number' && local._version >= o._version) return local;
+            return o;
+          });
+          // OTs creadas en este equipo que aún no llegan al servidor
+          const localOnly = prev.filter(p => !serverCodes.has(p.codigo) && hasPendingOT(p.codigo));
+          const next = [...merged, ...localOnly];
+          // Si nada cambió, se conserva la misma lista (evita re-dibujar y re-guardar cada 20 s)
+          return next.length === prev.length && next.every((o, i) => o === prev[i]) ? prev : next;
+        });
+        await pollCollections();
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          // La sesión expiró mientras no había señal: se pide entrar de nuevo; la cola se conserva
+          setAuthState('login');
+        } else if (isNetworkError(error)) {
+          setIsOffline(true);
+        }
+      }
+    };
+    const timer = setInterval(refresh, 20_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [authState, isOffline]);
+
+  const handleLogout = async () => {
+    if (pendingSync > 0 && !window.confirm(`Hay ${pendingSync} cambio(s) sin sincronizar. Si cierras sesión ahora quedarán en este equipo hasta que vuelvas a entrar. ¿Cerrar sesión?`)) return;
+    try { await logout(); } catch { /* igual se cierra localmente */ }
+    cacheSession(null);
+    clearOTCache();
+    window.location.reload();
+  };
+
+  // Helper para registro inmutable en Registro de Auditoría
   const addAuditLogEvent = (
     accion: string,
     modulo: string,
@@ -177,7 +402,7 @@ export default function App() {
     criticidad: 'Baja' | 'Media' | 'Alta' | 'Crítica' = 'Baja'
   ) => {
     const newEvent: AuditLogEvent = {
-      id: `EV-${Date.now().toString().substring(6)}`,
+      id: `EV-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       fechaHora: new Date().toISOString().replace('T', ' ').substring(0, 16),
       usuarioRol: `${userName} (${ROLES_CONFIG[userRole]?.title || userRole})`,
       accion,
@@ -187,9 +412,9 @@ export default function App() {
       comentario: comentario || '',
       criticidad
     };
-    const updated = [newEvent, ...auditLogs];
-    setAuditLogs(updated);
-    saveAuditLog(updated);
+    // 17A: actualización funcional; el servidor registra el usuario real de la sesión
+    setAuditLogs(prev => [newEvent, ...prev]);
+    postAudit({ accion, modulo, otCodigo: otCode, planta: plantaName, comentario, criticidad });
   };
 
   // 2. Sincronización automática de bases de datos reactivas con localStorage
@@ -204,8 +429,10 @@ export default function App() {
   };
 
   const handleUpdateOts = (updated: OT[]) => {
+    // 17A: se envían al servidor solo los campos cambiados de cada OT modificada
+    queueOTChanges(otsRef.current, updated);
+    otsRef.current = updated;
     setOts(updated);
-    saveOTs(updated);
   };
 
   const handleUpdateFindings = (updated: HSEFinding[]) => {
@@ -248,29 +475,6 @@ export default function App() {
     savePtws(updated);
   };
 
-  // Cambio de identidad (Role Switcher)
-  const handleRoleChange = (roleId: RoleType) => {
-    saveActiveRole(roleId);
-    setUserRole(roleId);
-    
-    // Buscar nombre del rol en organigrama
-    const org = loadOrganigrama();
-    const match = org.find(u => u.role === roleId);
-    if (match) {
-      setUserName(match.name);
-    } else {
-      setUserName('Usuario Demostración');
-    }
-
-    // Redireccionar a vista sugerida por el rol
-    const rConfig = ROLES_CONFIG[roleId];
-    if (rConfig && rConfig.suggestedView) {
-      setActiveView(rConfig.suggestedView);
-    }
-
-    setIsRoleDropdownOpen(false);
-  };
-
   // Rutas profundas (Deep Linking) con filtros
   const handleNavigateWithFilters = (view: string, filters?: any) => {
     setActiveView(view);
@@ -283,14 +487,15 @@ export default function App() {
     {
       title: 'Mando O&M',
       items: [
-        { id: 'Home', label: 'Home Jefatura O&M', icon: Cpu },
+        { id: 'Home', label: 'Inicio Jefatura O&M', icon: Cpu },
         { id: 'OTs', label: 'ORBI OT Center', icon: FileText },
+        { id: 'Maestros', label: 'Activos y Preventivos', icon: Wrench },
         { id: 'Workspace', label: 'ORBI Workspace', icon: Calendar },
         { id: 'BI', label: 'ORBI Insight Center', icon: BarChart2 },
       ]
     },
     {
-      title: 'Ejecución & Terreno',
+      title: 'Ejecución y Terreno',
       items: [
         { id: 'Terreno', label: 'Vista Terreno', icon: Smartphone },
         { id: 'Organigrama', label: 'Organigrama O&M', icon: Users },
@@ -299,19 +504,19 @@ export default function App() {
       ]
     },
     {
-      title: 'Logística & Bodega',
+      title: 'Logística y Bodega',
       items: [
-        { id: 'Flota', label: 'Control de Flota & Logística', icon: Truck },
-        { id: 'Repuestos', label: 'Repuestos & Herramientas', icon: Wrench },
-        { id: 'People', label: 'People & Resource Center', icon: Briefcase },
+        { id: 'Flota', label: 'Flota y Logística', icon: Truck },
+        { id: 'Repuestos', label: 'Repuestos y Herramientas', icon: Wrench },
+        { id: 'People', label: 'Personas y Carga de Trabajo', icon: Briefcase },
       ]
     },
     {
-      title: 'Gobernanza & Seguridad',
+      title: 'Gobernanza y Seguridad',
       items: [
-        { id: 'Escalaciones', label: 'Risk & Escalation Center', icon: AlertTriangle },
-        { id: 'HSE', label: 'HSE & Quality Bridge', icon: ShieldAlert },
-        { id: 'AuditLog', label: 'ORBI Audit Log', icon: ClipboardList },
+        { id: 'Escalaciones', label: 'Riesgos y Escalamientos', icon: AlertTriangle },
+        { id: 'HSE', label: 'HSE y Calidad', icon: ShieldAlert },
+        { id: 'AuditLog', label: 'Registro de Auditoría', icon: ClipboardList },
         { id: 'Gobernanza', label: 'Gobernanza ORBI', icon: Award },
       ]
     },
@@ -319,12 +524,27 @@ export default function App() {
       title: 'Análisis O&M',
       items: [
         { id: 'FotonPrime', label: 'FOTON PRIME O&M IA', icon: Brain },
-        { id: 'DemoHub', label: 'ORBI Executive Demo Hub', icon: Award },
-        { id: 'DemoReadiness', label: 'Release & Demo Center', icon: Cpu },
+        { id: 'DemoHub', label: 'Presentación Ejecutiva', icon: Award },
+        { id: 'DemoReadiness', label: 'Preparación de Demo', icon: Cpu },
         { id: 'Configuracion', label: 'Configuración', icon: Settings },
       ]
     }
   ];
+
+  if (authState === 'loading') {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">Conectando con el servidor…</div>;
+  }
+  if (authState === 'login' || authState === 'change-password') {
+    return <LoginScreen mode={authState} onDone={(session) => { setAuthState('loading'); void startSession(session); }} />;
+  }
+  if (authState === 'offline') {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 text-slate-300 text-sm p-6 text-center">
+        <p>No se pudo conectar con el servidor de ORBI. Revisa la señal e intenta de nuevo.</p>
+        <button className="px-4 py-2 rounded-lg bg-emerald-500 text-slate-950 font-bold" onClick={() => { setAuthState('loading'); void startSession(); }}>Reintentar</button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
@@ -344,8 +564,8 @@ export default function App() {
               <Zap className="h-5 w-5 text-slate-950 font-bold" />
             </div>
             <div>
-              <span className="text-xs font-mono font-bold tracking-widest text-emerald-400 block leading-none">ORBI ECOSISTEMA</span>
-              <h1 className="text-sm font-black text-white tracking-tight leading-normal">O&M Command Center</h1>
+              <span className="text-xs font-mono font-bold tracking-widest text-emerald-400 block leading-none">ORBI</span>
+              <h1 className="text-sm font-black text-white tracking-tight leading-normal">O&M Work Center</h1>
             </div>
           </div>
         </div>
@@ -355,7 +575,7 @@ export default function App() {
           {/* Hora del Sistema */}
           <div className="hidden md:flex items-center gap-1.5 text-xs font-mono text-slate-500 bg-slate-950/40 border border-slate-900 px-3 py-1.5 rounded-lg">
             <Clock className="h-3.5 w-3.5 text-slate-500" />
-            <span>{systemTime || 'Telemetría Sincronizada'}</span>
+            <Reloj />
           </div>
 
           {/* Selector de Roles Integrado */}
@@ -370,42 +590,29 @@ export default function App() {
                 <div className="text-[9px] text-slate-500 leading-none">IDENTIDAD ACTIVA</div>
                 <div className="text-xs font-bold text-white truncate max-w-[120px]">{userName}</div>
               </div>
+              {pendingSync > 0 && (
+                <span title="Cambios pendientes de sincronizar" className="text-[10px] font-bold bg-amber-500 text-slate-950 rounded-full px-1.5">
+                  {pendingSync} sin sincronizar
+                </span>
+              )}
               <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
             </button>
 
             {isRoleDropdownOpen && (
               <div className="absolute right-0 mt-2 w-72 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl py-2 z-50 max-h-[80vh] overflow-y-auto">
-                <div className="px-4 py-2 border-b border-slate-800">
-                  <h4 className="text-xs font-bold text-white">Simulador de Roles O&M</h4>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Permite validar vistas sugeridas y permisos visuales.</p>
+                <div className="px-4 py-3 border-b border-slate-800">
+                  <h4 className="text-xs font-bold text-white">{userName}</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{ROLES_CONFIG[userRole]?.title || userRole}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    {pendingSync > 0 ? `${pendingSync} cambio(s) pendientes de sincronizar` : 'Todo sincronizado con el servidor'}
+                  </p>
                 </div>
-
-                {Object.keys(ROLES_CONFIG).map((rk) => {
-                  const roleConfig = ROLES_CONFIG[rk];
-                  const isCurrent = userRole === rk;
-                  return (
-                    <button
-                      key={rk}
-                      onClick={() => handleRoleChange(rk as RoleType)}
-                      className={`w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-slate-950 transition-colors ${
-                        isCurrent ? 'bg-slate-950/60' : ''
-                      }`}
-                    >
-                      <div>
-                        <div className="text-xs font-bold text-slate-200">{roleConfig.title}</div>
-                        <div className="text-[10px] text-slate-500 truncate max-w-[190px]">{roleConfig.scope}</div>
-                      </div>
-                      {isCurrent && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>}
-                    </button>
-                  );
-                })}
-
-                <div className="p-2 border-t border-slate-800 mt-2">
+                <div className="p-2">
                   <button
-                    onClick={resetAllDatabases}
-                    className="w-full py-2 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-slate-950 text-xs font-bold font-mono rounded-lg transition-colors flex items-center justify-center gap-1"
+                    onClick={handleLogout}
+                    className="w-full py-2 bg-slate-950 hover:bg-slate-800 text-slate-200 text-xs font-bold rounded-lg transition-colors"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" /> Resetear Base Simulada
+                    Cerrar sesión
                   </button>
                 </div>
               </div>
@@ -413,25 +620,41 @@ export default function App() {
           </div>
         </div>
       </header>
+      {isOffline && authState === 'ready' && (
+        <div role="status" className="bg-amber-500 text-slate-950 text-xs font-bold px-4 py-2">
+          Sin señal: trabajando con la copia guardada en este equipo. {pendingSync > 0 ? `${pendingSync} cambio(s) se enviarán` : 'Los cambios se enviarán'} al volver la conexión.
+        </div>
+      )}
+      {storageError && (
+        <div role="alert" className="bg-rose-600 text-white text-xs font-bold px-4 py-2 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />{storageError}</span>
+          <button onClick={() => setStorageError(null)} className="underline shrink-0">Cerrar</button>
+        </div>
+      )}
 
       {/* CUERPO PRINCIPAL DEL PANEL */}
       <div className="flex-1 flex relative">
         
-        {/* SIDEBAR NAVEGACIÓN DESKTOP & MOBILE */}
+        {/* 17A UX P0: en teléfono el menú es un panel sólido sobre una capa oscura (antes era transparente) */}
+        {isSidebarOpen && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-30 lg:hidden" onClick={() => setIsSidebarOpen(false)} aria-hidden="true" />
+        )}
         <aside
-          className={`bg-slate-900/40 border-r border-slate-800/80 w-64 flex flex-col justify-between p-4 z-30 transition-all duration-300 ${
+          aria-label="Menú principal"
+          className={`border-r border-slate-800/80 w-64 flex-col justify-between p-4 ${
             isSidebarOpen
-              ? 'fixed inset-y-0 left-0 bg-slate-900 w-64'
-              : 'hidden lg:flex'
+              ? 'fixed inset-y-0 left-0 z-40 flex bg-slate-900 shadow-2xl shadow-black/60 lg:static lg:z-auto lg:shadow-none lg:bg-slate-900/40'
+              : 'hidden lg:flex bg-slate-900/40'
           }`}
         >
           {/* Botón de cierre para celular */}
           {isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 p-1 rounded-lg border border-slate-850 lg:hidden"
+              aria-label="Cerrar menú"
+              className="absolute top-3 right-3 text-slate-300 p-2.5 rounded-lg border border-slate-700 lg:hidden"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
           )}
 
@@ -441,6 +664,10 @@ export default function App() {
                 <div className="text-[9px] font-mono tracking-widest text-slate-500 uppercase px-2 font-black border-b border-slate-900 pb-1">{section.title}</div>
                 <nav className="space-y-0.5">
                   {section.items.filter((item) => {
+                    // 17A Fase 2: los maestros de mantenimiento no se muestran a técnicos ni clientes
+                    if (item.id === 'Maestros' && ['TECNICO_OM', 'LECTURA_CLIENTE'].includes(userRole)) {
+                      return null;
+                    }
                     if (item.id === 'DemoReadiness' || item.id === 'DemoHub') {
                       return ['SUPER_ADMIN_ORBI', 'JEFE_OM', 'SUPERVISOR_TERRENO', 'COORDINADOR_OM'].includes(userRole);
                     }
@@ -458,7 +685,8 @@ export default function App() {
                           setPassedFilters(null);
                           setIsSidebarOpen(false);
                         }}
-                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium font-mono tracking-wide transition-all ${
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-all ${
                           isActive
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                             : 'text-slate-400 hover:text-white hover:bg-slate-900/40 border border-transparent'
@@ -474,21 +702,12 @@ export default function App() {
             ))}
           </div>
 
-          {/* Información de la Configuración y Seguridad */}
-          <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-900">
-            <span className="text-[9px] font-mono text-emerald-400 block mb-1 uppercase tracking-wider">Mapeo de Integración</span>
-            <p className="text-[10px] text-slate-500 leading-normal mb-2">
-              Bases de datos estructuradas e independientes preparadas para conexión persistente remota.
-            </p>
-            <div className="flex flex-wrap gap-1 text-[8px] font-mono">
-              <span className="bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-850">LocalState</span>
-              <span className="bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-850">Firebase Ready</span>
-            </div>
-          </div>
         </aside>
 
         {/* AREA DE CONTENIDO PRINCIPAL */}
-        <main className="flex-1 p-6 overflow-y-auto max-w-[1600px] mx-auto w-full">
+        <main className={`flex-1 ${activeView === 'Terreno' ? 'p-0' : 'p-3'} sm:p-6 overflow-y-auto max-w-[1600px] mx-auto w-full`}>
+          <ErrorBoundary modulo={activeView} resetKey={activeView}>
+          <Suspense fallback={<CargandoModulo />}>
           {activeView === 'Home' && (
             <HomeEjecutivo
               plantas={plantas}
@@ -583,6 +802,10 @@ export default function App() {
               onUpdate={handleUpdateFindings}
               userRole={userRole}
             />
+          )}
+
+          {activeView === 'Maestros' && (
+            <CmmsMaestros plantas={plantas} userRole={userRole} />
           )}
 
           {activeView === 'Workspace' && (
@@ -768,15 +991,24 @@ export default function App() {
                 <p className="text-xs text-slate-400 leading-relaxed font-mono">
                   Si experimenta problemas de consistencia con los datos o desea restablecer los valores simulados a sus valores originales, puede inicializar de nuevo la base de datos de localStorage.
                 </p>
+                {['SUPER_ADMIN_ORBI', 'JEFE_OM'].includes(userRole) ? (
                 <button
-                  onClick={resetAllDatabases}
+                  onClick={() => {
+                    if (!window.confirm('¿Borrar la copia local de este navegador y volver a descargar todo desde el servidor? Los datos del servidor no se modifican.')) return;
+                    clearLocalMirrorAndReload();
+                  }}
                   className="px-4 py-2 bg-rose-500 text-slate-950 text-xs font-bold font-mono rounded-lg hover:bg-rose-400 transition-colors flex items-center gap-1.5"
                 >
-                  <RefreshCw className="h-4 w-4" /> Resetear Base Simulada de Datos
+                  <RefreshCw className="h-4 w-4" /> Recargar datos desde el servidor
                 </button>
+                ) : (
+                  <p className="text-xs text-amber-400 font-mono">Solo Super Admin o Jefe O&amp;M pueden restablecer la base de datos.</p>
+                )}
               </div>
             </div>
           )}
+          </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

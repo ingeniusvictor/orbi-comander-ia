@@ -5,7 +5,7 @@
 
 import { RoleConfig } from '../types';
 
-// Configuración de Roles y Permisos del ecosistema ORBI O&M Command Center IA
+// Configuración de Roles y Permisos del ecosistema ORBI O&M Work Center
 export const ROLES_CONFIG: Record<string, RoleConfig> = {
   SUPER_ADMIN_ORBI: {
     id: 'SUPER_ADMIN_ORBI',

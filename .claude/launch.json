@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "orbi-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "orbi-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "serve:prod"
+      ],
+      "port": 3000
+    }
+  ]
+}

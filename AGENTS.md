@@ -2,13 +2,15 @@
 
 This file contains custom instructions, architecture guidelines, and the version registry for **ORBI OT Center**. The platform automatically loads these instructions to maintain operational stability and prevent functional regressions in subsequent development sessions.
 
+> **Nombre del producto (desde 2026-11-20): ORBI O&M Work Center.** Reemplaza a "ORBI O&M Command Center IA" en todo texto visible (cabecera, inicio de sesión, título, app instalable, documentos). "ORBI OT Center", "ORBI Workspace" e "ORBI Insight Center" siguen siendo los nombres de sus módulos. El nombre de la carpeta y del repositorio (`orbi-comander-ia`) no cambia. Comparación con SoftWrench y siguiente fase propuesta: `docs/COMPARATIVA_SOFTWRENCH.md`.
+
 ---
 
 ## 1. VERSION REGISTRY
-**Current Version:** `ORBI OT Center v0.X / Workspace v11B / Insight Center 12A / MÓDULO 16B.1F — PLANT SCOPE TAXONOMY & ANALYTICS ISOLATION COMPLETE / RELEASE LOCK CANDIDATE`  
-**Status:** **FROZEN / FINAL RELEASE LOCK**  
+**Current Version:** `ORBI OT Center v0.X / … / MÓDULO 16B.1F (base congelada) → MÓDULO 17A — PILOTO FUNCIONAL (EN DESARROLLO)`  
+**Status:** **MÓDULO 17A ABIERTO** — Autorizado por el dueño del producto (2026-11-19) para convertir la demo en un piloto funcional. Los congelamientos 13A–16B quedan levantados **solo** para los cambios del plan 17A descritos en la sección "MÓDULO 17A" más abajo.  
 **Runtime:** React 18+ (Vite) | TypeScript | Tailwind CSS | Recharts & Lucide Icons  
-**State Engine:** Client-side LocalStorage Persistence with fully synchronized mock systems.
+**State Engine:** (17A Fase 1) Servidor Express + SQLite como fuente de verdad; localStorage queda como copia local y cola de cambios pendientes.
 
 ---
 
@@ -459,6 +461,114 @@ Before approving any subsequent build or turn, verify the following 12 test path
 - **Validador Automatizado:** Implementado `src/data/validateData.ts` ejecutable mediante `npm run validate:data` (retorna `EXIT CODE 0 / PASS`).
 
 ---
+
+### MÓDULO 17A — PILOTO FUNCIONAL (EN DESARROLLO)
+- **Status:** `ABIERTO / AUTORIZADO 2026-11-19 / RAMA feat/piloto-17a`
+- **Objetivo:** entregar a gerencia un piloto usable por técnicos y supervisores reales, alineado al flujo de SoftWrench/Maximo que usa hoy la operación.
+- **Referencia de flujo real (SoftWrench, últimos 90 días al 2026-11-19):** ~3.875 OTs; 58% preventivas; estados WAPPR, RTBSCH, DAPPR, INPROG, HOLD, RQARVW, FDCOMP, RSALOR, COMPL/CLOSED, CAN; promedio de 8 a 10 días entre ejecutada (FDCOMP) y cerrada; checklists por plantilla dentro de cada plan preventivo.
+- **Plan por fases:**
+  - **Fase 0 — Integridad (HECHA en esta rama):**
+    - Máquina de estados única `src/domain/otStateMachine.ts` (`transitionOT`), con mapeo de estados ORBI → códigos SoftWrench, reglas de ejecución y cierre, control por rol e historial con fecha y usuario. Todo cambio de estado de OT DEBE pasar por `transitionOT`.
+    - Eliminada la copia paralela `DB_WORKSPACE` (revertía estados) y la preparación automática de casos demo en ReportCenter.
+    - La migración de esquema ya no inventa firmas, aprobaciones ni avances de checklist.
+    - Carga/guardado con respaldo de datos dañados y aviso visible (`orbi:storage-error`).
+    - `ErrorBoundary` contra pantallas en blanco; reset con doble confirmación solo para Super Admin y Jefe O&M; Report Center restringido por rol.
+    - Pruebas `tests/otStateMachine.test.ts` incluidas en `npm test`.
+  - **Fase 1 — Servidor y usuarios (HECHA en esta rama):**
+    - Servidor Express con SQLite integrado (`node:sqlite`, Node 24+), carpeta `ORBI_DATA_DIR`. Código en `server/` (db, auth, otSync, routes, repo, collections, cli).
+    - Inicio de sesión real (scrypt, cookie httpOnly, cambio obligatorio de contraseña). El rol sale de la sesión; se eliminó el selector de roles.
+    - El servidor revalida cada cambio de OT: guardado por campo con detección de conflictos, transiciones con `transitionOT` y el usuario real, técnicos limitados a sus OTs, firmas y validaciones por rol, evidencias con foto real.
+    - Colecciones compartidas en el servidor (inventario, movimientos, PTW, escalamientos, HSE, planificación, plantas...) reflejadas en localStorage (`src/data/serverSync.ts`).
+    - Cola persistente de cambios pendientes con reintento; fotos reales reducidas a 1600 px.
+    - Respaldos automáticos diarios; datos demo solo con `ORBI_SEED_DEMO=true`. Guía: `docs/PILOTO_DESPLIEGUE.md`.
+    - **Regla para agentes:** ningún módulo debe escribir el estado de una OT ni campos de firma/validación sin pasar por el servidor; los usuarios se administran con `npm run user`.
+  - **Fase 2 — Entidades CMMS (HECHA en esta rama):**
+    - Dominio compartido `src/domain/cmms.ts`: activos con jerarquía (validación de ciclos, importación CSV), plantillas de checklist con tipo de respuesta (OK/No OK, número con rango, texto) y versión, planes preventivos con periodicidad, líneas de HH, catálogos de códigos de espera y de falla.
+    - Maestros como colecciones compartidas (`orbi_cmms_*`), editables por planificación y jefatura en el módulo "Activos y Preventivos" (`src/components/CmmsMaestros.tsx`).
+    - Generador de OTs preventivas en el servidor (`server/pm.ts`): al iniciar, cada 24 h y a pedido; idempotente por plan y fecha (tabla `pm_generated`); usa la fecha de Chile (`ORBI_TZ`).
+    - Reglas nuevas en `transitionOT`: pasar a espera exige código de motivo; cerrar una correctiva o emergencia exige codificación de falla (problema, causa, acción).
+    - HH por técnico: el técnico solo agrega sus propias líneas; el total `hhReales` lo calcula el servidor.
+    - Ficha de OT y Vista Terreno: activo del catastro, motivo de espera, codificación de falla, líneas de HH y respuestas numéricas con detección de fuera de rango (`src/components/OTMaintenanceFields.tsx`).
+    - Datos demo (solo `ORBI_SEED_DEMO=true`): activos de Cantillana (39 inversores SG250HX en 3 estaciones + C2), 2 plantillas y 2 planes (`src/data/cmmsSeed.ts`).
+  - **Fase 3 — Terreno (HECHA en esta rama):**
+    - App instalable (PWA): `public/manifest.webmanifest`, `public/icon.svg` y service worker `public/sw.js` (solo producción). El service worker nunca guarda respuestas de `/api`.
+    - Inicio sin señal: sesión y OTs guardadas en el equipo (`orbi_sync_session`, `orbi_sync_ots_cache`); aviso "Sin señal" y contador de cambios pendientes.
+    - Fotos sin señal: se guardan en IndexedDB (`src/data/photoQueue.ts`) con identificador provisorio `local-…`; al volver la conexión se suben primero y se reemplazan en la cola antes de enviar los cambios de la OT.
+    - Foto por pregunta del checklist; una pregunta de plantilla marcada "requiere foto" no se da por ejecutada sin su foto (regla en `transitionOT` y validación en el servidor).
+    - Probar el modo sin señal con `npm run build` y `npm run serve:prod` (el service worker no se activa en `npm run dev`).
+  - **Fase 4 — Prueba de punta a punta (HECHA en esta rama):**
+    - `tests/e2e-api.test.ts` (en `npm test`): ciclo preventivo (plan anual 4736 → cierre con 3 firmas) y correctivo (inversor C2, espera de repuesto, consumo de inventario, codificación de falla) con 4 usuarios, más pruebas de aislamiento y permisos.
+    - `tests/e2e/piloto.spec.ts` (`npm run e2e`, Playwright con Microsoft Edge, sin descargar navegadores): técnico en teléfono incluyendo pérdida y recuperación de señal, y Jefe O&M en PC.
+    - Correcciones encontradas: Vista Terreno a pantalla completa en teléfonos; auditoría sin señal en cola.
+    - Guía para gerencia: `docs/GUIA_PRUEBA_PILOTO.md`.
+    - **Regla para agentes:** antes de dar por terminado un cambio que toque OTs, sincronización o Vista Terreno, ejecutar `npm test` y `npm run e2e`.
+  - **Fase 5 — UX premium (EN CURSO):** auditoría en `docs/AUDITORIA_UX_PREMIUM.md` (P0, P1, P2). **P0 hecho:** menú móvil sólido, sin jerga interna ni textos falsos en la interfaz, tono 850 definido, fuentes locales con Space Grotesk en títulos, sin notas de arquitectura visibles. **P1 hecho:** terreno con botones de 44 px y letra mínima de 12 px (prueba automática 7 en `tests/e2e/piloto.spec.ts`), contraste AA, "Modo sol" (`.tema-sol` en `src/index.css`), avisos propios `notify()` (`src/components/Toaster.tsx`) en lugar de `alert()`, foco visible y etiquetas accesibles.
+    - **Regla para agentes:** no usar `alert()`; usar `notify()`. En Vista Terreno, nada interactivo bajo 44 px ni texto bajo 12 px.
+    - **Regla para agentes:** no mostrar al usuario versiones internas, estados "FROZEN/Sandbox/Mock", nombres de tecnologías no usadas ni notas de arquitectura; si un dato es simulado, decirlo en una frase clara en español.
+    - **P2 hecho:** tokens de estado (`accent`, `ok`, `warn`, `danger`, `info`, `surface`, `line`, `ink` en `src/index.css`), componente `Button` (`src/components/ui/Button.tsx`), íconos Lucide en lugar de emojis en Vista Terreno y OT Center, letra de código solo para códigos, glosario en español en menú y pestañas, carga de módulos bajo demanda (`React.lazy` en `src/App.tsx`; el técnico baja 164 kB comprimidos), reloj aislado y guardado diferido de la copia de OTs. Los cargadores de maestros CMMS viven en `src/data/cmmsStore.ts`.
+    - **Regla para agentes:** botones nuevos con `Button`/`buttonClass` y colores de estado con los tokens (`text-danger`, `bg-ok/15`…), no con tonos sueltos; sin emojis en la interfaz; textos visibles en español.
+    - **Regla para agentes:** los módulos de `App.tsx` se importan con `lazy()`; no volver a importarlos de forma directa. El service worker (`public/sw.js`) conserva los archivos que la versión vigente usa en cadena; si se cambia, mantener la prueba 8 de `tests/e2e/piloto.spec.ts` (abrir sin señal).
+- **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.
+
+### MÓDULO 17B — FUNCIONES DE SOFTWRENCH QUE FALTAN (PLAN COMPLETO)
+- **Status:** `ABIERTO / AUTORIZADO 2026-11-20 / RAMA feat/piloto-17a`. Base: `docs/COMPARATIVA_SOFTWRENCH.md` (datos reales: 483 correctivos pendientes, 500 OTs ejecutadas sin cerrar, 824 preventivos vencidos en 90 días).
+- **Plan:** 1) correctivo de seguimiento desde el hallazgo; 2) bandeja de aprobación con días de espera y marca "cobrable"; 3) fecha objetivo del contrato y tablero de vencidas; 4) plazos en la cola de cierre y aprobación múltiple; 5) correctivos pendientes al programar una visita.
+- **Punto 1 HECHO — correctivo de seguimiento:**
+  - Dominio `src/domain/seguimiento.ts` (`buildFollowUpOT`, `validateFollowUpInput`, `canCreateFollowUpFrom`, `newFollowUpCode`, `followUpsOf`). Campos nuevos en `OT`: `otOrigen`, `hallazgoOrigen`, `otsSeguimiento`, `reportadoPor`; origen `'Hallazgo en terreno'`.
+  - En Vista Terreno, bajo una pregunta marcada "Hallazgo": "Crear correctivo por este hallazgo" (`src/components/HallazgoSeguimiento.tsx`). Funciona sin señal (usa la cola de creación de OTs).
+  - El servidor (`POST /api/ots` con `otOrigen`, `prepareFollowUpOT` y `linkFollowUp` en `server/otSync.ts`) solo acepta código, descripción, prioridad, pregunta y fotos de la OT de origen; copia planta, activo y responsables del origen; crea la OT "Nueva" (WAPPR) sin técnico y registra el vínculo en el origen en la misma transacción.
+  - El técnico puede crear el correctivo solo desde OTs asignadas a él; ve los correctivos que reportó pero no los modifica (`canWriteOT`). Los campos del vínculo son del servidor (`SERVER_OWNED`).
+  - Ficha de la OT (OT Center y Vista Terreno): muestra la OT de origen y los correctivos creados desde ella (`OTMaintenanceFields`).
+  - Pruebas: `tests/seguimiento.test.ts`, dos pruebas 17B en `tests/e2e-api.test.ts` y paso 9 de `tests/e2e/piloto.spec.ts`.
+- **Regla para agentes:** el vínculo entre OTs lo escribe solo el servidor; no permitir que el cliente fije `otOrigen`, `otsSeguimiento` ni `reportadoPor` por otra vía.
+- **Punto 2 HECHO — bandeja de aprobación y cobrable:**
+  - Dominio `src/domain/aprobacion.ts` (`pendientesDeAprobacion`, `diasEsperando`, `ALERTA_DIAS_APROBACION` = 15, `ROLES_APROBACION`, `ROLES_COBRO`).
+  - Regla en `transitionOT`: salir de "Espera aprobación" (WAPPR) hacia el trabajo solo lo hacen `SUPER_ADMIN_ORBI`, `JEFE_OM`, `COORDINADOR_OM`, `GERENCIA` y `PLANIFICACION`; a "Asignada" o "Programada" exige técnico responsable; registra `aprobadaPor` y `fechaAprobacion`. Rechazar = cancelar (reglas de cancelación).
+  - Pestaña "Por aprobar (n)" en OT Center (`src/components/BandejaAprobacion.tsx`): más antiguas primero, días de espera (ámbar desde 15, rojo desde 30), filtro por planta, aprobar y asignar, rechazar con motivo, marcar cobrable.
+  - Campos `cobrable`, `cobrableReferencia` (los marca coordinación o jefatura; también en la ficha de la OT) y `cobrableDetalle` (quién y cuándo, lo fija el servidor y queda en el historial).
+  - Pruebas: 2 unitarias en `tests/seguimiento.test.ts`, 1 de API y paso 10 de `tests/e2e/piloto.spec.ts`.
+- **Punto 3 HECHO — fecha objetivo del contrato y plazos:**
+  - Planes preventivos con `toleranciaDias` (margen del contrato; por defecto según periodicidad: `TOLERANCIA_POR_DEFECTO` en `src/domain/cmms.ts`, editable en "Activos y Preventivos"). Cada OT generada lleva `fechaObjetivo` (como Target Start de SoftWrench) y `fechaObjetivoLimite`; su `fechaLimite` es ese mismo límite.
+  - Dominio `src/domain/plazos.ts`: estado del plazo (a tiempo, por vencer a 3 días, vencida, ejecutada a tiempo o con atraso). La ejecución se mide con el primer paso a ejecutada/en revisión/cerrada, no con el cierre administrativo. Sin fecha objetivo se usa la fecha límite.
+  - Pestaña "Plazos" en OT Center (`src/components/TableroPlazos.tsx`): vencidas, por vencer, cumplimiento a tiempo y activas, por planta o por cliente (cliente desde la matriz de plantas), listas de vencidas y por vencer. La ficha de la OT muestra su plazo.
+  - Pruebas: `tests/plazos.test.ts` y paso 11 de `tests/e2e/piloto.spec.ts`.
+- **Punto 4 HECHO — cola de cierre con plazos y firma múltiple:**
+  - Dominio `src/domain/cierre.ts`: `colaDeCierre` (ejecutadas sin cerrar, días desde la ejecución en terreno, firma pendiente y bloqueos de cierre), `firmarEtapa` (Supervisor → Coordinador → Jefe O&M; usa `transitionOT` y agrega la aprobación), `META_CIERRE_DIAS` = 3.
+  - Pestaña "Cola de cierre (n)" en OT Center (`src/components/ColaCierre.tsx`): días sin cerrar (ámbar sobre 3, rojo sobre 6), filtro por etapa, "Seleccionar todas las que puedo firmar" y firma de varias OTs a la vez; la firma de cierre solo se ofrece si la OT no tiene bloqueos. Cada OT se envía por separado y el servidor revalida firma y transición.
+  - Pruebas: 2 unitarias en `tests/seguimiento.test.ts`, 1 de API (cadena completa con `firmarEtapa`) y paso 12 de `tests/e2e/piloto.spec.ts`.
+- **Punto 5 HECHO — aprovechar la visita:**
+  - Dominio `src/domain/visitas.ts` (`correctivosPendientes`): correctivos y emergencias abiertos de la misma planta; solo los aprobados (por agendar o agendados otro día) se pueden sumar; los que esperan aprobación o están en espera se muestran con su motivo.
+  - Al programar o reprogramar en Workspace (`WorkspaceScheduleModal` en `src/components/WorkspaceViews.tsx`) aparece "Correctivos pendientes en <planta>"; los marcados quedan "Programada" el mismo día y con el mismo técnico, en un solo cambio de la lista (`handleWorkspaceScheduleSave`).
+  - Corregido: el formulario de programación llamaba hooks después de un `return null` (fallaba al abrirse); ahora el cuerpo es un componente aparte con `key` por OT. Sin rótulos "MÓDULO 11B" y con el estado actual visible.
+  - Pruebas: 1 unitaria en `tests/plazos.test.ts` y paso 13 de `tests/e2e/piloto.spec.ts`.
+- **Estado del 17B:** los 5 puntos del plan están hechos (ver `docs/COMPARATIVA_SOFTWRENCH.md`).
+
+### MÓDULO 17C — IMPORTACIÓN DESDE SOFTWRENCH (HECHO)
+- **Objetivo:** probar el piloto con datos reales de una planta (primero Cantillana) en paralelo con SoftWrench.
+- Dominio `src/domain/softwrenchImport.ts` (`construirImportacion`, `ESTADO_DESDE_SW`, `TIPO_DESDE_SW`, `nombreDesdeCorreo`); servidor `server/importSoftwrench.ts` (`importarSnapshot`, en una transacción y con las mismas validaciones de "Activos y Preventivos"); comando `npm run import:softwrench -- <archivo> [--aplicar]` (sin `--aplicar` solo simula). Guía: `docs/IMPORTAR_SOFTWRENCH.md`.
+- Identificadores fijos (`sw-…` y el número de OT de SoftWrench): reimportar no duplica; lo existente no se pisa; un plan con el mismo número ya existente se reutiliza.
+- Planes importados **inactivos** (SoftWrench sigue generando las OTs); OTs solo abiertas o ejecutadas sin cerrar; las ejecutadas entran a la cola de cierre con su día de ejecución en terreno. Campo `softwrench` en la OT (número, estado, enlace), escrito solo por el servidor (`SERVER_OWNED`); la ficha muestra "Ver en SoftWrench".
+- Primera carga (2026-11-20, base local del piloto): Cantillana con 39 inversores, 126 formularios (5 con sus preguntas reales: checklist mensual de inversores), 30 planes y 32 OTs (20 programadas y 12 ejecutadas sin cerrar, con 59 días promedio de espera).
+- **Regla para agentes:** las extracciones contienen datos reales: van en `data/importaciones/` (fuera de git) y nunca se suben al repositorio. Las pruebas usan datos inventados (`tests/softwrenchImport.test.ts`).
+- **Actualización (mismo comando con una extracción nueva):** `actualizarDesdeSw` en `src/domain/softwrenchImport.ts`. Solo OTs con campo `softwrench`; el estado solo avanza (rango WAPPR < RTBSCH < DAPPR < INPROG/HOLD < FDCOMP/RQARVW < RSALOR < COMPL/CAN), nunca retrocede lo hecho en ORBI; fechas solo si no empezó; técnico/HH solo si están vacíos; cobrable solo se agrega; plantillas sin preguntas se reemplazan (versión + 1) y los checklists aún sin tocar reciben las preguntas reales. Cada OT actualizada sube de versión con sus `fieldVersions`.
+- Segunda carga (2026-11-20): preguntas reales de 66 formularios (13 planes: mensuales, trimestrales y 2 anuales); 8 OTs programadas recibieron su checklist real. Faltan las preguntas de 60 formularios, sobre todo anuales y de termografía, que SoftWrench solo muestra en OTs ejecutadas.
+- **Regla para agentes:** las preguntas condicionales de SoftWrench ("¿Qué … falta?") no se cargan como pregunta: se responden con Hallazgo + observación.
+
+### MÓDULO 17D — ALARMAS DEL SCADA (VCOM) → CORRECTIVOS (LISTO, SIN CONECTAR)
+- **Fuente:** API del portal O&M de TriTec (FastAPI, Entra ID; revisada en su ambiente de desarrollo). No entrega OTs de SoftWrench; sí alarmas VCOM, numeración PT/AST, plantas/equipos, semáforo de equipos, bitácora y disponibilidad.
+- Dominio `src/domain/alarmas.ts` (`normalizarAlarma`, `planificarAlarmas`, `correctivoDesdeAlarma`, `agregarAlarma`, `REGLA_POR_DEFECTO`): high/critical, abiertas ≥ 30 min, una OT por alarma (`AL-<systemKey>-<id>`), agrupación por equipo y alarmas nuevas agregadas al correctivo abierto del mismo equipo. El correctivo nace "Nueva" (Por aprobar), origen "Centro de Control", campo `alarmasOrigen` (solo lo escribe el servidor).
+- Servidor: `server/portalOm.ts` (configuración `ORBI_PORTAL_OM_*` y `ORBI_VCOM_PLANTAS`, token de Entra ID por credenciales de aplicación) y `server/alarmas.ts` (`procesarAlarmas`, revisión cada `ORBI_ALARMAS_MINUTOS`, estado en `GET /api/integraciones/alarmas`). Sin variables queda apagado. Comando `npm run alarmas -- <archivo> | --portal [--aplicar]`.
+- Pantalla: "Por aprobar" muestra el estado de la conexión y la alarma de origen; la ficha de la OT, las alarmas con severidad y hora.
+- Guía: `docs/ALARMAS_VCOM.md`. Ejemplo: `docs/ejemplos/alarmas-ejemplo.json` (datos inventados; no aplicar en la base del piloto). Pruebas: `tests/alarmas.test.ts`.
+- **Pendiente (TI):** registrar ORBI en Entra ID con permiso en la API del portal (producción) y entregar el `systemKey` de cada planta. Confirmar el formato real de las alarmas con la primera respuesta.
+
+### MÓDULO 17E — NUMERACIÓN OFICIAL DE PT/AST (HECHO; OFICIAL AL CONECTAR EL PORTAL)
+- Antes el PTW Center inventaba el número al azar. Ahora `POST /api/ptw/numero` lo entrega al guardar (`server/numeracionPt.ts`, dominio `src/domain/numeracionPt.ts`).
+- Con portal (`ORBI_PORTAL_OM_*` + `ORBI_PT_ACRONIMOS`): reserva en `/correlativos/{acrónimo}/{año}/siguiente`, registra en `/log-pt` y libera el número si el registro falla. Planta sin acrónimo: error (no se inventa).
+- Sin portal: contador del servidor por planta y año (tabla `pt_correlativos`), que sigue al mayor número ya usado. El permiso guarda `numeracion: 'portal' | 'local'`; queda en auditoría. Formato `ORBI_PT_FORMATO` (por defecto `PT-{acronimo}-{anio}-{correlativo}`); AST = código del PT + `-AST`.
+- Obtener número requiere conexión (evita duplicados entre teléfonos sin señal). Guía: `docs/NUMERACION_PT.md`. Pruebas: `tests/numeracionPt.test.ts`, prueba de API 17E y paso 14 de pantalla.
+- **Pendiente (operación/TI):** acrónimo oficial de cada planta y confirmar el formato del código con un PT real.
+- **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)
 

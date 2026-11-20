@@ -27,13 +27,15 @@ import {
   ArrowDownToLine,
   ExternalLink
 } from 'lucide-react';
-import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem } from '../types';
+import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, RoleType, Escalation } from '../types';
+import { transitionOT } from '../domain/otStateMachine';
 
 interface ReportCenterProps {
   ots: OT[];
   plantas: Planta[];
   userRole: string;
   activeUserName: string;
+  escalaciones?: Escalation[];
   onUpdateOts: (updatedOts: OT[]) => void;
   onAddAuditLog: (
     accion: string,
@@ -59,6 +61,7 @@ export default function ReportCenter({
   plantas = [],
   userRole,
   activeUserName,
+  escalaciones = [],
   onUpdateOts,
   onAddAuditLog
 }: ReportCenterProps) {
@@ -89,109 +92,7 @@ export default function ReportCenter({
     }
   }, [notification]);
 
-  // Ensure that reference cases exist in local storage for testing purposes
-  useEffect(() => {
-    const hasCantillanaPM = ots.some(o => o.codigo === '26-29221' || o.codigo === 'OT-26-29221');
-    const hasCantillanaCorr = ots.some(o => o.codigo === 'OT-26-29222' || o.codigo === '26-29222');
-    
-    let updatedList = [...ots];
-    let mutated = false;
-
-    // 1. If 26-29221 is not fully set, let's make sure it's in a good testable state for Módulo 8
-    if (hasCantillanaPM) {
-      const idx = updatedList.findIndex(o => o.codigo === '26-29221' || o.codigo === 'OT-26-29221');
-      if (idx !== -1 && updatedList[idx].estado === 'En ejecución') {
-        // Promote it to a state that is testable for closure (e.g. finalizada / in review)
-        // so that the supervisor can demonstrate closing it
-        // and fill essential fields
-        updatedList[idx] = {
-          ...updatedList[idx],
-          estado: 'Finalizada', // Promoted to Field Work Complete tray
-          propuestaCierreTerreno: true,
-          diagnosticoFinalTerreno: 'Inspección anual de inversores INV-01 a INV-39 completada satisfactoriamente. Se realizó limpieza física integral de gabinetes y soplado.',
-          accionRealizadaTerreno: 'Ajuste de bornes con torquímetro, reemplazo de 12 filtros de aire en el parque Sungrow, y pruebas térmicas finales.',
-          resultadoTerreno: 'Exitoso',
-          hhReales: 38,
-          astFirmado: true,
-          sharepointStatus: updatedList[idx].sharepointStatus || 'Pendiente de preparar'
-        };
-        mutated = true;
-      }
-    }
-
-    // 2. Ensure Corrective Case OT-26-29222 exists
-    if (!hasCantillanaCorr) {
-      const newCorrOt: OT = {
-        codigo: 'OT-26-29222',
-        plantaId: 'P10',
-        plantaNombre: 'Cantillana',
-        activo: 'Inversor Central C2 (Sungrow)',
-        tipo: 'Correctiva',
-        prioridad: 'Alta',
-        criticidad: 'Alta',
-        responsable: 'Víctor León',
-        coordinador: 'Rodolfo Garcés',
-        supervisor: 'Mauricio Valdés',
-        fechaInicio: '2026-07-07',
-        fechaLimite: '2026-07-17',
-        estado: 'Finalizada', // Promoted to Field Work Complete tray
-        avance: 100,
-        hhEstimadas: 12,
-        hhReales: 10,
-        observaciones: 'Reemplazo de tarjeta de control averiada por falla en el inversor central C2 de la Planta Cantillana.',
-        diagnosticoInicial: 'Alarma de fallo crítico de comunicación interna. Inversor offline. Código Sungrow E-12.',
-        diagnosticoFinalTerreno: 'Tarjeta de control quemada por sobretemperatura severa. No admite reparación.',
-        accionRealizadaTerreno: 'Reemplazo físico de tarjeta de control Sungrow, cableado de bus RS-485 y calibración con firmware v2.4.',
-        resultadoTerreno: 'Exitoso',
-        repuestosRequeridos: ['Tarjeta de control C2'],
-        repuestos: ['Tarjeta de control C2'],
-        requiereChecklist: true,
-        checklistExecution: [
-          { item: 'Confirmar desenergización segura y bloqueo LOTO', completado: true },
-          { item: 'Desmontar tarjeta de control quemada', completado: true },
-          { item: 'Montar repuesto de tarjeta de control nueva', completado: true },
-          { item: 'Prueba funcional de arranque y comunicación', completado: true }
-        ],
-        requiereEvidencia: true,
-        evidencePack: [
-          {
-            evidenceId: 'EV-COR-01',
-            otId: 'OT-26-29222',
-            type: 'before',
-            label: 'Antes - Tarjeta Inoperativa',
-            description: 'Componente quemado visible cerca de bornes de alimentación.',
-            simulatedFileName: 'sungrow_burnt_c2.jpg',
-            uploadedBy: 'Víctor León',
-            uploadedAt: '2026-07-07 10:15',
-            status: 'Aprobada'
-          },
-          {
-            evidenceId: 'EV-COR-02',
-            otId: 'OT-26-29222',
-            type: 'after',
-            label: 'Después - Reemplazo Exitoso',
-            description: 'Nueva tarjeta Sungrow C2 montada y comunicando.',
-            simulatedFileName: 'sungrow_new_c2.jpg',
-            uploadedBy: 'Víctor León',
-            uploadedAt: '2026-07-07 11:30',
-            status: 'Aprobada'
-          }
-        ],
-        astFirmado: true,
-        requiereAST: true,
-        origen: 'Centro de Control',
-        impacto: 'Alto',
-        riesgoDisponibilidad: 'Riesgo alto',
-        sharepointStatus: 'Pendiente de preparar'
-      };
-      updatedList.push(newCorrOt);
-      mutated = true;
-    }
-
-    if (mutated) {
-      onUpdateOts(updatedList);
-    }
-  }, []);
+  // 17A: se eliminó la preparación automática de casos demo al abrir el módulo (alteraba datos reales).
 
   // Filter OTs into their respective Trays (Bandejas)
   const getOtsInTray = (tray: TrayType): OT[] => {
@@ -400,21 +301,22 @@ export default function ReportCenter({
       return;
     }
 
-    const updated = ots.map(o => {
-      if (o.codigo === ot.codigo) {
-        return {
-          ...o,
-          estado: 'Cerrada' as OTEstado, // Transition to Closed state directly
-          fechaCierre: new Date().toISOString().split('T')[0],
-          jefeOM: activeUserName,
-          estadoCierre: 'Cerrado Total',
-          sharepointStatus: o.sharepointStatus === 'Paquete preparado' ? 'Respaldado' as const : o.sharepointStatus
-        };
-      }
-      return o;
+    const closeResult = transitionOT(ot, 'Cerrada', {
+      usuario: activeUserName,
+      rol: userRole as RoleType,
+      comentario: 'Aprobación del Report Pack y cierre documental',
+      escalaciones
+    }, {
+      fechaCierre: new Date().toISOString().split('T')[0],
+      jefeOM: activeUserName,
+      estadoCierre: 'Cerrado Total',
+      sharepointStatus: ot.sharepointStatus === 'Paquete preparado' ? 'Respaldado' : ot.sharepointStatus
     });
-
-    onUpdateOts(updated);
+    if (closeResult.ok === false) {
+      setNotification({ type: 'error', message: closeResult.error });
+      return;
+    }
+    onUpdateOts(ots.map(o => o.codigo === ot.codigo ? closeResult.ot : o));
     onAddAuditLog(
       'Aprobación Cierre Documental',
       'Report Center',
@@ -441,25 +343,24 @@ export default function ReportCenter({
   const handleDevolveConfirm = () => {
     if (!devolvingOt) return;
 
-    const updated = ots.map(o => {
-      if (o.codigo === devolvingOt.codigo) {
-        return {
-          ...o,
-          estado: 'Devuelta a ejecución' as OTEstado, // Re-opens for technician in terrain
-          avance: 70, // roll-back progress
-          motivoDevolucion: motivoDevolucion,
-          comentarioDevolucion: comentarioDevolucion || 'Requiere correcciones en terreno.',
-          detallesFaltantes: detallesFaltantes || 'Por favor revisar el reporte adjunto para subsanar observaciones.',
-          // Also flag evidence pack elements that were rejected as review requested
-          evidencePack: o.evidencePack?.map(ev => 
-            ev.status === 'Requiere revisión' || ev.status === 'Rechazada' ? { ...ev, status: 'Requiere revisión' as const } : ev
-          )
-        };
-      }
-      return o;
+    const devResult = transitionOT(devolvingOt, 'Devuelta a ejecución', {
+      usuario: activeUserName,
+      rol: userRole as RoleType,
+      comentario: `Devuelta a terreno: ${motivoDevolucion}. ${comentarioDevolucion}`
+    }, {
+      avance: 70,
+      motivoDevolucion: motivoDevolucion,
+      comentarioDevolucion: comentarioDevolucion || 'Requiere correcciones en terreno.',
+      detallesFaltantes: detallesFaltantes || 'Por favor revisar el reporte adjunto para subsanar observaciones.',
+      evidencePack: devolvingOt.evidencePack?.map(ev =>
+        ev.status === 'Requiere revisión' || ev.status === 'Rechazada' ? { ...ev, status: 'Requiere revisión' as const } : ev
+      )
     });
-
-    onUpdateOts(updated);
+    if (devResult.ok === false) {
+      setNotification({ type: 'error', message: devResult.error });
+      return;
+    }
+    onUpdateOts(ots.map(o => o.codigo === devolvingOt.codigo ? devResult.ot : o));
     onAddAuditLog(
       'Devolución a Terreno',
       'Report Center',
@@ -487,6 +388,16 @@ export default function ReportCenter({
   const getTrayCount = (tray: TrayType): number => {
     return getOtsInTray(tray).length;
   };
+
+  // 17A: Report Center restringido a supervisión y gestión (antes cualquier rol podía cerrar desde aquí)
+  const REPORT_CENTER_ROLES = ['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADOR_OM', 'SUPERVISOR_TERRENO'];
+  if (!REPORT_CENTER_ROLES.includes(userRole)) {
+    return (
+      <div className="p-6 rounded-xl border border-slate-800 bg-slate-950 text-slate-300 text-sm">
+        El Report Center está disponible solo para Supervisor, Coordinador, Jefe O&amp;M, Gerencia y Super Admin.
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 font-sans">

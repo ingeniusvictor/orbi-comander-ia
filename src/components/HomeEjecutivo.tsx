@@ -236,12 +236,8 @@ export default function HomeEjecutivo({
         
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse"></span>
-              <span className="text-xs font-mono text-indigo-400 tracking-widest uppercase">PLATAFORMA INDEPENDIENTE ORBI</span>
-            </div>
-            <h1 className="text-2xl font-black tracking-tight text-white mb-1">
-              ORBI O&M Command Center IA <span className="text-slate-400 font-normal">|</span> <span className="text-indigo-400 font-mono text-base font-medium">v0.12C-QA — Global Operations Shell</span>
+            <h1 className="text-2xl font-bold tracking-tight text-white mb-1">
+              Centro de mando O&amp;M
             </h1>
             <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
               Centro de mando para jefatura, coordinación y supervisión O&M. Integra planificación, terreno, órdenes de trabajo, recursos, logística, riesgos, BI y cierre documental.
@@ -249,87 +245,30 @@ export default function HomeEjecutivo({
           </div>
           
           <div className="flex items-center gap-3 bg-slate-950 border border-slate-800 rounded-xl p-3">
-            <Activity className="h-5 w-5 text-indigo-400 animate-pulse" />
-            <div className="font-mono text-right">
-              <div className="text-[9px] text-slate-500 uppercase font-bold">Capacidad Red</div>
-              <div className="text-sm font-bold text-white">{mwpTotales} MWp <span className="text-slate-400">Total</span></div>
+            <Activity className="h-5 w-5 text-emerald-400" />
+            <div className="text-right">
+              <div className="text-xs text-slate-400">Capacidad de la red</div>
+              <div className="text-sm font-bold text-white"><span className="font-mono">{mwpTotales}</span> MWp</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ESTADO DEL ECOSISTEMA ORBI */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-indigo-500/20 rounded-2xl p-5 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none"></div>
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-          <div className="space-y-1">
-            <span className="text-[9px] font-mono font-bold tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full uppercase">
-              Estado del Ecosistema ORBI
-            </span>
-            <h3 className="text-sm font-extrabold text-white tracking-tight mt-1">
-              Ecosistema Integrado de Control
-            </h3>
-            <p className="text-xs text-slate-400">
-              Visualización y monitoreo de la arquitectura unificada de operaciones.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full lg:w-auto">
-            <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-center">
-              <span className="text-[8px] font-mono text-slate-500 uppercase block">Plataforma Madre</span>
-              <span className="text-xs font-bold text-white block mt-0.5 font-mono">ORBI O&amp;M Command Center IA</span>
-            </div>
-            <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-center">
-              <span className="text-[8px] font-mono text-slate-500 uppercase block">Estado General</span>
-              <span className="text-xs font-bold text-indigo-400 block mt-0.5 font-mono">Sandbox Ejecutivo / Demo Interna</span>
-            </div>
-            <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-center">
-              <span className="text-[8px] font-mono text-slate-500 uppercase block">Módulo Operativo</span>
-              <span className="text-xs font-bold text-emerald-400 block mt-0.5 font-mono">OT Center v0.X</span>
-            </div>
-            <div className="bg-slate-950/60 border border-teal-500/20 p-2.5 rounded-xl text-center">
-              <span className="text-[8px] font-mono text-slate-500 uppercase block">Estado OT Center</span>
-              <span className="text-xs font-bold text-teal-400 block mt-0.5 font-mono">FROZEN / FINAL RELEASE LOCK</span>
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-4 pt-3 border-t border-slate-900/60 flex flex-wrap gap-2 items-center text-[10px] font-mono text-slate-500">
-          <span className="text-slate-400 font-bold">Módulos Conectados en Sandbox:</span>
-          <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-slate-300">Workspace</span>
-          <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-slate-300">Insight Center</span>
-          <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-slate-300">Vista Terreno</span>
-          <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-slate-300">Flota</span>
-          <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-slate-300">Repuestos</span>
-          <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-slate-300">People &amp; Resource</span>
-          <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-slate-300">Risk &amp; Escalation</span>
-        </div>
-      </div>
-
-      {/* SPOTLIGHT DE MÓDULO CONGELADO — ORBI OT CENTER */}
-      <div className="bg-gradient-to-br from-slate-900/80 via-slate-950 to-slate-900 border border-teal-500/20 rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-full blur-2xl pointer-events-none"></div>
+      {/* 17A UX P0: se quitaron los estados internos de versión ("FROZEN", "Sandbox", "v0.X") */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="space-y-1.5 max-w-3xl">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[9px] font-mono font-bold tracking-widest text-teal-400 bg-teal-500/10 border border-teal-500/25 px-2 py-0.5 rounded uppercase">
-              Módulo Congelado — OT Center v0.X
-            </span>
-            <span className="text-[9px] font-mono font-bold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 rounded uppercase flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse"></span>
-              FROZEN / FINAL RELEASE LOCK
-            </span>
-          </div>
-          <h3 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-1.5">
-            <BookmarkCheck className="h-4.5 w-4.5 text-teal-400" /> ORBI OT Center v0.X
+          <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+            <BookmarkCheck className="h-5 w-5 text-emerald-400" /> Órdenes de trabajo
           </h3>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Órdenes de trabajo, agenda técnica, evidencias, PTW, inventario O&amp;M segmentado por planta, SharePoint Router y Report Center.
+          <p className="text-sm text-slate-300 leading-relaxed">
+            Ciclo completo de la OT: programación, ejecución en terreno, evidencias, permisos de trabajo, repuestos, revisión y cierre.
           </p>
         </div>
         <button
           onClick={() => onNavigate('OTs')}
-          className="w-full sm:w-auto px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-mono text-xs font-black rounded-xl border border-teal-450 transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-lg shadow-teal-500/10 group cursor-pointer"
+          className="w-full sm:w-auto px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 shrink-0"
         >
-          <CheckSquare className="h-4 w-4 text-slate-950 group-hover:scale-110 transition-transform" />
+          <CheckSquare className="h-4 w-4" />
           Abrir OT Center
         </button>
       </div>
@@ -343,10 +282,10 @@ export default function HomeEjecutivo({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-indigo-400" />
-              <h3 className="text-sm font-bold text-white">Ir a ORBI Workspace</h3>
+              <h3 className="text-sm font-bold text-white">Planificación (Workspace)</h3>
             </div>
             <p className="text-xs text-slate-400 leading-normal max-w-sm">
-              Calendario operativo y cuadrículas de programación. Define **CUÁNDO, DÓNDE y QUIÉN** ejecuta el mantenimiento.
+              Calendario operativo y cuadrículas de programación. Define <strong className="text-slate-200">cuándo, dónde y quién</strong> ejecuta el mantenimiento.
             </p>
           </div>
           <ArrowRight className="h-5 w-5 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
@@ -359,10 +298,10 @@ export default function HomeEjecutivo({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <BarChart2 className="h-5 w-5 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white">Ir a ORBI Insight Center</h3>
+              <h3 className="text-sm font-bold text-white">Indicadores (Insight Center)</h3>
             </div>
             <p className="text-xs text-slate-400 leading-normal max-w-sm">
-              Inteligencia operativa y análisis de resultados. Mide **QUÉ RESULTADOS** se obtuvieron y reporta a Gerencia.
+              Inteligencia operativa y análisis de resultados. Mide <strong className="text-slate-200">qué resultados</strong> se obtuvieron y reporta a gerencia.
             </p>
           </div>
           <ArrowRight className="h-5 w-5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
@@ -431,7 +370,7 @@ export default function HomeEjecutivo({
             <Layers className="h-5 w-5 text-indigo-400" /> Mapa del Ecosistema ORBI O&amp;M IA
           </h2>
           <p className="text-xs text-slate-400">
-            Navegación unificada y distribución de módulos por dominios operacionales en el Command Center. Haga clic en cualquier módulo para abrirlo directamente.
+            Navegación unificada y distribución de módulos por dominios operacionales en ORBI O&M Work Center. Haga clic en cualquier módulo para abrirlo directamente.
           </p>
         </div>
 
@@ -562,9 +501,8 @@ export default function HomeEjecutivo({
               >
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-medium text-slate-200 group-hover:text-emerald-300 font-sans">ORBI OT Center v0.X</span>
+                  <span className="text-xs font-medium text-slate-200 group-hover:text-emerald-300 font-sans">ORBI OT Center</span>
                 </div>
-                <span className="text-[9px] font-mono text-teal-400 bg-teal-500/5 px-1.5 py-0.5 rounded border border-teal-500/10 font-bold">FROZEN</span>
               </div>
 
               <div 
@@ -740,7 +678,7 @@ export default function HomeEjecutivo({
       {/* RECURSOS, LOGÍSTICA & TRAZABILIDAD SUB-GRID */}
       <div className="bg-slate-900/10 border border-slate-800/60 p-4 rounded-xl">
         <span className="text-[10px] font-mono text-cyan-400 font-bold tracking-wider uppercase block mb-3 flex items-center gap-1.5">
-          <Truck className="h-4 w-4" /> FIELD LOGISTICS, RESOURCES & TRACEABILITY (v0.1.1C)
+          <Truck className="h-4 w-4" /> Logística, recursos y trazabilidad
         </span>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           <div 
@@ -875,9 +813,9 @@ export default function HomeEjecutivo({
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
-                    FOTON PRIME O&M IA <span className="text-[8px] bg-indigo-500/10 text-indigo-400 px-1 rounded border border-indigo-500/20 font-sans">v0.1.2C-QA</span>
+                    FOTON PRIME O&M IA
                   </h3>
-                  <p className="text-[9px] text-slate-500 font-mono">Asistente Ejecutivo del Command Center</p>
+                  <p className="text-[9px] text-slate-500 font-mono">Asistente Ejecutivo de ORBI O&M Work Center</p>
                 </div>
               </div>
             </div>
@@ -1025,7 +963,7 @@ export default function HomeEjecutivo({
             Plan de Evolución Tecnológica
           </span>
           <h3 className="text-sm font-bold text-white mt-1.5 flex items-center gap-1.5">
-            <TrendingUp className="h-4 w-4 text-indigo-400" /> Próximos Módulos del Command Center
+            <TrendingUp className="h-4 w-4 text-indigo-400" /> Próximos Módulos de ORBI O&M Work Center
           </h3>
           <p className="text-xs text-slate-400">
             Roadmap del ecosistema de automatización O&amp;M para fases posteriores de implementación real.
@@ -1034,9 +972,8 @@ export default function HomeEjecutivo({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 pt-1">
           <div className="bg-slate-950/60 border border-slate-900 p-3.5 rounded-xl space-y-1">
-            <span className="text-[8px] font-mono text-slate-500 block uppercase">MONITORING</span>
-            <span className="text-xs font-bold text-slate-200 block">Monitoring / SCADA Center</span>
-            <span className="text-[9px] text-slate-500 block leading-tight font-mono">Lecturas y alarmas de telemetría viva de inversores.</span>
+            <span className="text-xs font-bold text-slate-200 block">Monitoreo SCADA</span>
+            <span className="text-xs text-slate-400 block leading-tight">Próxima etapa: lecturas y alarmas de inversores (aún no conectado).</span>
           </div>
 
           <div className="bg-slate-950/60 border border-slate-900 p-3.5 rounded-xl space-y-1">

@@ -4,6 +4,8 @@
  */
 
 import React, { useState } from 'react';
+import { notify } from './Toaster';
+import { transitionOT, nextEstados, softwrenchCodeOf } from '../domain/otStateMachine';
 import {
   FileText,
   Search,
@@ -39,7 +41,7 @@ import {
   Copy,
   FolderSync
 } from 'lucide-react';
-import { OT, Planta, OrganigramaNode, OTEstado, OTType, OTPrioridad, PlanPreventivo, PTW } from '../types';
+import { OT, Planta, OrganigramaNode, OTEstado, OTType, OTPrioridad, PlanPreventivo, PTW, RoleType } from '../types';
 import { getPlantBadgeInfo } from '../data/plantIdentityMap';
 import EvidenceVault from './EvidenceVault';
 import SharePointRouter from './SharePointRouter';
@@ -47,6 +49,12 @@ import PTWCenter from './PTWCenter';
 import OMInventory from './OMInventory';
 import SchedulerIA from './SchedulerIA';
 import ReportCenter from './ReportCenter';
+import OTMaintenanceFields from './OTMaintenanceFields';
+import BandejaAprobacion from './BandejaAprobacion';
+import TableroPlazos from './TableroPlazos';
+import ColaCierre from './ColaCierre';
+import { colaDeCierre } from '../domain/cierre';
+import { esperaAprobacion, ROLES_COBRO } from '../domain/aprobacion';
 
 interface OTManagerProps {
   ots: OT[];
@@ -331,7 +339,7 @@ export default function OTManager({
   
   const [editingOt, setEditingOt] = useState<OT | null>(null);
   const [activeTab, setActiveTab] = useState<number>(0);
-  const [activeSubView, setActiveSubView] = useState<'ots' | 'vault' | 'sharepoint' | 'ptw' | 'inventory' | 'scheduler'>('ots');
+  const [activeSubView, setActiveSubView] = useState<'ots' | 'aprobar' | 'cierre' | 'plazos' | 'vault' | 'sharepoint' | 'ptw' | 'inventory' | 'scheduler' | 'reports'>('ots');
   
   // States for Wizard
   const [isCreatingWizard, setIsCreatingWizard] = useState<boolean>(false);
@@ -549,7 +557,7 @@ export default function OTManager({
   // Perform multi-module integrations on Wizard save
   const handleSaveWizard = (targetState: OTEstado) => {
     if (!wizardOt.activo || !wizardOt.observaciones) {
-      alert('Por favor complete el Activo y las Observaciones antes de guardar.');
+      notify('Por favor complete el Activo y las Observaciones antes de guardar.');
       return;
     }
 
@@ -677,87 +685,18 @@ export default function OTManager({
     if (!editingOt) return;
     setTransitionError(null);
 
-    // Business rules checks for closure
-    if (['Cerrada', 'Finalizada'].includes(targetState)) {
-      if (editingOt.checklistExecution && editingOt.checklistExecution.length > 0) {
-        const incomplete = editingOt.checklistExecution.some(c => !c.completado && !c.noAplica);
-        if (incomplete) {
-          setTransitionError('No se permite finalizar/cerrar la OT: El checklist de ejecución de campo está incompleto.');
-          return;
-        }
-      }
-      
-      const hasEvidence = editingOt.evidencia || 
-                           (editingOt.evidencias && editingOt.evidencias.length > 0) || 
-                           (editingOt.evidencePack && editingOt.evidencePack.length > 0);
-      if (editingOt.requiereEvidencia && !hasEvidence) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Requiere subir evidencia documental o fotográfica primero.');
-        return;
-      }
-      if (!editingOt.hhReales || editingOt.hhReales <= 0) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Las Horas Hombre Reales (HH Ejecutadas) deben ser mayores a 0.');
-        return;
-      }
-      if (editingOt.requiereAST && !editingOt.astFirmado) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Firma AST de terreno pendiente.');
-        return;
-      }
-      if (editingOt.requiereValidacionHSE && editingOt.validacionHSE !== 'Aprobado') {
-        setTransitionError('No se permite finalizar/cerrar la OT: Validación de seguridad HSE pendiente o rechazada.');
-        return;
-      }
-      if (editingOt.requiereValidacionCalidad && editingOt.validacionCalidad !== 'Aprobado') {
-        setTransitionError('No se permite finalizar/cerrar la OT: Validación de Aseguramiento de Calidad pendiente o rechazada.');
-        return;
-      }
-      if (editingOt.bloqueada) {
-        setTransitionError('No se permite finalizar la OT mientras se encuentre en estado de bloqueo operativo activo.');
-        return;
-      }
-      const hasCriticalEscalation = escalaciones?.some(esc => esc.otVinculada === editingOt.codigo && (esc.criticidad === 'Crítica' || esc.criticidad === 'Alta') && esc.estado !== 'Resuelto' && esc.estado !== 'Cerrado');
-      if (hasCriticalEscalation) {
-        setTransitionError('No se permite finalizar/cerrar la OT: Existe un escalamiento de riesgo de criticidad Alta o Crítica abierto y sin resolver para este activo.');
-        return;
-      }
-      if ((editingOt.criticidad === 'Crítica' || editingOt.prioridad === 'Crítica') && !editingOt.approvals?.some(a => ['JefeOM', 'JEFE_OM', 'Jefe O&M', 'Jefe de O&M'].includes(a.rol))) {
-        setTransitionError('No se permite cerrar una OT de criticidad CRÍTICA sin la aprobación digital formal del Jefe de O&M.');
-        return;
-      }
-    }
-
-    // Role restriction for reopening
-    if (targetState === 'Reabierta' && editingOt.estado === 'Cerrada') {
-      if (userRole !== 'JEFE_OM' && userRole !== 'SUPER_ADMIN_ORBI') {
-        setTransitionError('Sólo el Jefe de O&M o el Administrador de ORBI pueden reabrir una OT cerrada.');
-        return;
-      }
-    }
-
-    // Capture lifecycle transition history
-    const historyEntry = {
-      estadoAnterior: editingOt.estado,
-      estadoNuevo: targetState,
-      fecha: new Date().toISOString(),
+    const result = transitionOT(editingOt, targetState, {
       usuario: activeUserName,
+      rol: userRole as RoleType,
+      escalaciones,
       comentario: `Cambio de estado manual a ${targetState}`
-    };
+    });
+    if (result.ok === false) {
+      setTransitionError(result.error);
+      return;
+    }
 
-    const changesEntry = {
-      fecha: new Date().toISOString().split('T')[0],
-      usuario: activeUserName,
-      accion: 'Transición Estado',
-      detalle: `Estado cambió de ${editingOt.estado} a ${targetState}`
-    };
-
-    const updatedOt = {
-      ...editingOt,
-      estado: targetState,
-      lifecycleHistory: [...(editingOt.lifecycleHistory || []), historyEntry],
-      historialCambios: [...(editingOt.historialCambios || []), changesEntry],
-      avance: targetState === 'Cerrada' || targetState === 'Finalizada' ? 100 : editingOt.avance
-    };
-
-    setEditingOt(updatedOt);
+    setEditingOt(result.ot);
     
     // Auto audit log
     if (targetState === 'Reabierta') {
@@ -880,13 +819,6 @@ export default function OTManager({
     if (!editingOt) return;
     
     // Check validation error if closing
-    if (stage === 'JefeOM') {
-      const errorMsg = getClosureValidationError(editingOt);
-      if (errorMsg) {
-        alert(errorMsg);
-        return;
-      }
-    }
 
     const now = new Date().toISOString();
     
@@ -954,15 +886,32 @@ export default function OTManager({
       logComment = `Aprobación final de cierre otorgada por el Jefe de O&M ${activeUserName}.`;
     }
 
+    // Las etapas que cambian el estado pasan por la máquina de estados única (17A)
+    let finalOt: OT = updated;
+    if (updated.estado !== editingOt.estado) {
+      const { estado: targetEstado, lifecycleHistory: _lh, historialCambios: _hc, ...patch } = updated;
+      const result = transitionOT(editingOt, targetEstado, {
+        usuario: activeUserName,
+        rol: userRole as RoleType,
+        escalaciones,
+        comentario: `Validación ${stage} por ${activeUserName}${tempComentarioRevisor ? ': ' + tempComentarioRevisor : ''}`
+      }, patch);
+      if (result.ok === false) {
+        notify(result.error);
+        return;
+      }
+      finalOt = result.ot;
+    }
+
     // Save and persist immediately to parent
-    const idx = ots.findIndex(o => o.codigo === updated.codigo);
+    const idx = ots.findIndex(o => o.codigo === finalOt.codigo);
     if (idx !== -1) {
       const list = [...ots];
-      list[idx] = updated;
+      list[idx] = finalOt;
       onUpdate(list);
     }
 
-    setEditingOt(updated);
+    setEditingOt(finalOt);
     setTempComentarioRevisor('');
     
     // Add Audit Logs
@@ -986,40 +935,30 @@ export default function OTManager({
       );
     }
 
-    alert(`¡Etapa ${stage} aprobada y firmada con éxito!`);
+    notify(`¡Etapa ${stage} aprobada y firmada con éxito!`);
   };
 
   const handleDevolveToField = () => {
     if (!editingOt) return;
     if (!tempComentarioDevolucion.trim() || !tempDetallesFaltantes.trim()) {
-      alert('Debe especificar un comentario de devolución y los detalles faltantes/pendientes.');
+      notify('Debe especificar un comentario de devolución y los detalles faltantes/pendientes.');
       return;
     }
 
-    const now = new Date().toISOString();
-    const newLifecycle = {
-      fecha: now,
+    const devResult = transitionOT(editingOt, 'Devuelta a ejecución', {
       usuario: activeUserName,
-      accion: 'Devolución a Terreno',
-      detalle: `Devuelta por ${activeUserName} debido a: ${tempMotivoDevolucion}`,
-      estadoNuevo: 'Devuelta a ejecución' as OTEstado,
-      comentario: tempComentarioDevolucion
-    };
-
-    const updated: OT = {
-      ...editingOt,
-      estado: 'Devuelta a ejecución',
+      rol: userRole as RoleType,
+      comentario: `Devuelta por ${activeUserName}: ${tempMotivoDevolucion}. ${tempComentarioDevolucion}`
+    }, {
       motivoDevolucion: tempMotivoDevolucion,
       comentarioDevolucion: tempComentarioDevolucion,
-      detallesFaltantes: tempDetallesFaltantes,
-      lifecycleHistory: [...(editingOt.lifecycleHistory || []), newLifecycle],
-      historialCambios: [...(editingOt.historialCambios || []), {
-        fecha: now.split('T')[0],
-        usuario: activeUserName,
-        accion: 'Devolución a Terreno',
-        detalle: `OT devuelta a ejecución debido a observaciones de revisión.`
-      }]
-    };
+      detallesFaltantes: tempDetallesFaltantes
+    });
+    if (devResult.ok === false) {
+      notify(devResult.error);
+      return;
+    }
+    const updated: OT = devResult.ot;
 
     // Save and persist immediately to parent
     const idx = ots.findIndex(o => o.codigo === updated.codigo);
@@ -1044,7 +983,7 @@ export default function OTManager({
       'Alta'
     );
 
-    alert('La orden de trabajo ha sido devuelta a terreno con éxito.');
+    notify('La orden de trabajo ha sido devuelta a terreno con éxito.');
   };
 
   // Markdown summary generation
@@ -1138,7 +1077,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
 
   const handleCopyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('¡Resumen Markdown copiado al portapapeles con éxito!');
+    notify('¡Resumen Markdown copiado al portapapeles con éxito!');
   };
 
   // Filter lists
@@ -1182,111 +1121,42 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
               className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all hover:scale-102"
               id="btn-create-ot"
             >
-              <PlusCircle className="h-4 w-4" /> Nuevo Despacho Wizard
+              <PlusCircle className="h-4 w-4" /> Nueva OT
             </button>
           )}
         </div>
       </div>
 
-      {/* Sub-view Navigation Tabs */}
-      <div className="flex gap-2 border-b border-slate-850 pb-2">
-        <button
-          onClick={() => {
-            setActiveSubView('ots');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'ots' && !editingOt
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          📋 Gestión de Órdenes de Trabajo (OT)
-        </button>
-        <button
-          onClick={() => {
-            setActiveSubView('scheduler');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'scheduler'
-              ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          📅 {isTechnician ? 'Mi Agenda Técnica' : 'ORBI Scheduler IA'}
-        </button>
-        <button
-          onClick={() => {
-            setActiveSubView('vault');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'vault'
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          🔒 ORBI Evidence Vault &amp; Control GEO
-        </button>
-        {!isTechnician && (
-          <button
-            onClick={() => {
-              setActiveSubView('sharepoint');
-              setEditingOt(null);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-              activeSubView === 'sharepoint'
-                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-            }`}
-          >
-            📁 ORBI SharePoint Router Mock
-          </button>
-        )}
-        <button
-          onClick={() => {
-            setActiveSubView('ptw');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'ptw'
-              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          🛡️ ORBI PTW Center (Permisos)
-        </button>
-        {!isTechnician && (
-          <button
-            onClick={() => {
-              setActiveSubView('inventory');
-              setEditingOt(null);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-              activeSubView === 'inventory'
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-            }`}
-          >
-            📦 Inventario O&M
-          </button>
-        )}
-        {!isTechnician && (
-          <button
-            onClick={() => {
-              setActiveSubView('reports');
-              setEditingOt(null);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-              activeSubView === 'reports'
-                ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-            }`}
-          >
-            📊 Report Center
-          </button>
-        )}
+      {/* Pestañas de OT Center (17A UX P2: nombres en español, íconos Lucide y un solo acento) */}
+      <div role="tablist" aria-label="Secciones de OT Center" className="flex flex-wrap gap-2 border-b border-slate-850 pb-2">
+        {([
+          { id: 'ots', label: 'Órdenes de trabajo', icon: ClipboardList, show: true },
+          { id: 'aprobar', label: `Por aprobar (${ots.filter(esperaAprobacion).length})`, icon: CheckSquare, show: !isTechnician },
+          { id: 'cierre', label: `Cola de cierre (${colaDeCierre(ots, new Date().toISOString().slice(0, 10)).length})`, icon: ShieldCheck, show: !isTechnician },
+          { id: 'plazos', label: 'Plazos', icon: Clock, show: !isTechnician },
+          { id: 'scheduler', label: isTechnician ? 'Mi agenda' : 'Programación', icon: Calendar, show: true },
+          { id: 'vault', label: 'Evidencias', icon: Camera, show: true },
+          { id: 'sharepoint', label: 'Archivo SharePoint (simulado)', icon: FolderSync, show: !isTechnician },
+          { id: 'ptw', label: 'Permisos de trabajo', icon: ShieldCheck, show: true },
+          { id: 'inventory', label: 'Inventario O&M', icon: Package, show: !isTechnician },
+          { id: 'reports', label: 'Cierre documental', icon: FileText, show: !isTechnician },
+        ] as const).filter(t => t.show).map(t => {
+          const activa = activeSubView === t.id && !(t.id === 'ots' && editingOt);
+          const Icono = t.icon;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={activa}
+              onClick={() => { setActiveSubView(t.id as any); setEditingOt(null); }}
+              className={`min-h-10 px-4 rounded-[var(--radius-control)] text-sm font-medium transition-colors flex items-center gap-2 ${
+                activa ? 'bg-accent/10 text-accent border border-accent/30' : 'text-slate-400 border border-transparent hover:text-white hover:bg-slate-900/40'
+              }`}
+            >
+              <Icono className="h-4 w-4" aria-hidden="true" /> {t.label}
+            </button>
+          );
+        })}
       </div>
 
       {activeSubView === 'scheduler' ? (
@@ -1338,12 +1208,25 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
           activeUserName={activeUserName}
           onAddAuditLog={onAddAuditLog}
         />
+      ) : activeSubView === 'cierre' ? (
+        <ColaCierre ots={ots} userRole={userRole} activeUserName={activeUserName} escalaciones={escalaciones} onUpdate={onUpdate} />
+      ) : activeSubView === 'plazos' ? (
+        <TableroPlazos ots={ots} plantas={plantas} />
+      ) : activeSubView === 'aprobar' ? (
+        <BandejaAprobacion
+          ots={ots}
+          organigrama={organigrama}
+          userRole={userRole}
+          activeUserName={activeUserName}
+          onUpdate={onUpdate}
+        />
       ) : activeSubView === 'reports' ? (
         <ReportCenter
           ots={ots}
           plantas={plantas}
           userRole={userRole}
           activeUserName={activeUserName}
+          escalaciones={escalaciones}
           onUpdateOts={onUpdate}
           onAddAuditLog={onAddAuditLog}
         />
@@ -2048,7 +1931,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                     {editingOt.codigo}
                   </span>
                   <span className="text-[10px] font-mono text-slate-500">
-                    Ficha de OT Profesional
+                    Ficha de OT
                   </span>
                 </div>
                 <h3 className="text-base font-black text-white mt-1">
@@ -2070,7 +1953,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                 { label: 'Planificación', icon: Calendar },
                 { label: 'Personas', icon: User },
                 { label: 'Logística', icon: Truck },
-                { label: 'Repuestos & Herramientas', icon: Wrench },
+                { label: 'Repuestos y Herramientas', icon: Wrench },
                 { label: 'Ejecución Terreno', icon: ClipboardList },
                 { label: 'Evidencias', icon: Camera },
                 { label: 'HSE & Calidad', icon: ShieldCheck },
@@ -2985,6 +2868,16 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                 )}
               </div>
 
+              {/* 17A Fase 2: activo, motivo de espera, codificación de falla y horas hombre */}
+              <OTMaintenanceFields
+                ot={editingOt}
+                ots={ots}
+                puedeCobrar={ROLES_COBRO.includes(userRole as RoleType)}
+                userName={activeUserName}
+                canEditPlanning={['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADOR_OM', 'PLANIFICACION', 'SUPERVISOR_TERRENO'].includes(userRole)}
+                onChange={(patch) => setEditingOt({ ...editingOt, ...patch })}
+              />
+
               {/* State transition control block */}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-900">
                 <span className="text-[10px] font-mono text-slate-400 font-bold">Cambiar Estado:</span>
@@ -2993,12 +2886,10 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                   onChange={(e) => handleStateChange(e.target.value as OTEstado)}
                   className="bg-slate-900 border border-slate-800 text-xs text-white rounded p-1.5 font-mono outline-none cursor-pointer focus:border-emerald-500"
                 >
-                  {ESTADOS_PERMITIDOS.map(st => {
-                    if (st === 'Reabierta' && editingOt.estado !== 'Cerrada' && editingOt.estado !== 'Reabierta') {
-                      return null;
-                    }
-                    return <option key={st} value={st}>{st}</option>;
-                  })}
+                  <option value={editingOt.estado}>{editingOt.estado} ({softwrenchCodeOf(editingOt.estado)})</option>
+                  {nextEstados(editingOt.estado).map(st => (
+                    <option key={st} value={st}>{st} ({softwrenchCodeOf(st)})</option>
+                  ))}
                 </select>
               </div>
 

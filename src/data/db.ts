@@ -447,6 +447,73 @@ export const INITIAL_OTS: OT[] = [
       }
     ]
   },
+  // 17A: caso de referencia correctivo como dato semilla (antes lo creaba ReportCenter al abrirse)
+  {
+      codigo: 'OT-26-29222',
+      plantaId: 'ORBI-PV-058',
+      legacyPlantId: 'P10',
+      activoId: 'CANT-C2',
+      plantaNombre: 'Cantillana',
+      activo: 'Inversor Central C2 (Sungrow)',
+      tipo: 'Correctiva',
+      prioridad: 'Alta',
+      criticidad: 'Alta',
+      responsable: 'Víctor León',
+      coordinador: 'Rodolfo Garcés',
+      supervisor: 'Mauricio Valdés',
+      fechaInicio: '2026-07-07',
+      fechaLimite: '2026-07-17',
+      estado: 'Finalizada', // Caso de referencia correctivo (ejecutada, pendiente de revisión)
+      avance: 100,
+      hhEstimadas: 12,
+      hhReales: 10,
+      observaciones: 'Reemplazo de tarjeta de control averiada por falla en el inversor central C2 de la Planta Cantillana.',
+      diagnosticoInicial: 'Alarma de fallo crítico de comunicación interna. Inversor offline. Código Sungrow E-12.',
+      diagnosticoFinalTerreno: 'Tarjeta de control quemada por sobretemperatura severa. No admite reparación.',
+      accionRealizadaTerreno: 'Reemplazo físico de tarjeta de control Sungrow, cableado de bus RS-485 y calibración con firmware v2.4.',
+      codigoFalla: { problema: 'INV-OFF', causa: 'TARJETA', accion: 'REEMPLAZO' },
+      resultadoTerreno: 'Exitoso',
+      repuestosRequeridos: ['Tarjeta de control C2'],
+      repuestos: ['Tarjeta de control C2'],
+      requiereChecklist: true,
+      checklistExecution: [
+        { item: 'Confirmar desenergización segura y bloqueo LOTO', completado: true },
+        { item: 'Desmontar tarjeta de control quemada', completado: true },
+        { item: 'Montar repuesto de tarjeta de control nueva', completado: true },
+        { item: 'Prueba funcional de arranque y comunicación', completado: true }
+      ],
+      requiereEvidencia: true,
+      evidencePack: [
+        {
+          evidenceId: 'EV-COR-01',
+          otId: 'OT-26-29222',
+          type: 'before',
+          label: 'Antes - Tarjeta Inoperativa',
+          description: 'Componente quemado visible cerca de bornes de alimentación.',
+          simulatedFileName: 'sungrow_burnt_c2.jpg',
+          uploadedBy: 'Víctor León',
+          uploadedAt: '2026-07-07 10:15',
+          status: 'Aprobada'
+        },
+        {
+          evidenceId: 'EV-COR-02',
+          otId: 'OT-26-29222',
+          type: 'after',
+          label: 'Después - Reemplazo Exitoso',
+          description: 'Nueva tarjeta Sungrow C2 montada y comunicando.',
+          simulatedFileName: 'sungrow_new_c2.jpg',
+          uploadedBy: 'Víctor León',
+          uploadedAt: '2026-07-07 11:30',
+          status: 'Aprobada'
+        }
+      ],
+      astFirmado: true,
+      requiereAST: true,
+      origen: 'Centro de Control',
+      impacto: 'Alto',
+      riesgoDisponibilidad: 'Riesgo alto',
+      sharepointStatus: 'Pendiente de preparar'
+  }
 ];
 
 // 4. Base HSE & Calidad Findings (DB_HSE_CALIDAD)
@@ -874,7 +941,7 @@ export const INITIAL_AUDIT_LOG: AuditLogEvent[] = [
     fechaHora: '2026-07-06 11:20',
     usuarioRol: 'Sofía Mondaca (Especialista HSE)',
     accion: 'Firma HSE',
-    moduloOrigen: 'HSE & Quality Bridge',
+    moduloOrigen: 'HSE y Calidad',
     otVinculada: 'OT-2026-001',
     plantaVinculada: 'Atacama Solar',
     comentario: 'AST de terreno validado y aprobado en sistema. Proceder con el bloqueo del disyuntor.',
@@ -898,7 +965,7 @@ export const INITIAL_AUDIT_LOG: AuditLogEvent[] = [
     fechaHora: '2026-07-06 15:30',
     usuarioRol: 'Felipe Soto (Jefe O&M)',
     accion: 'Escalamiento a Jefe O&M',
-    moduloOrigen: 'Risk & Escalation Center',
+    moduloOrigen: 'Riesgos y Escalamientos',
     otVinculada: 'OT-2026-004',
     plantaVinculada: 'Pelícano Solar',
     comentario: 'Falta de tarjeta SMA escalada a Gerencia y Compras con prioridad máxima para evitar caída en la generación.',
@@ -1105,7 +1172,7 @@ const checkAndMigrateSchema = () => {
           const defaultItems = getChecklistByOTType(ot.tipo || '', ot.activo || '');
           const checklistExecution = ot.checklistExecution || defaultItems.map((item, index) => ({
             item,
-            completado: ot.avance ? (ot.avance >= ((index + 1) * (100 / defaultItems.length))) : isDone,
+            completado: false, // 17A: no se infiere avance de checklist que nadie registró
             noAplica: false,
             observacion: '',
             hallazgo: false,
@@ -1136,7 +1203,7 @@ const checkAndMigrateSchema = () => {
             riesgoDisponibilidad: ot.riesgoDisponibilidad === 'Sí' ? 'Riesgo crítico' : ot.riesgoDisponibilidad === 'Parcial' ? 'Riesgo medio' : 'No aplica',
             repuestos: ot.repuestos || [],
             historialCambios: ot.historialCambios || [
-              { fecha: ot.fechaInicio + ' 09:00', usuario: 'Rodolfo Garcés', accion: 'Migración', detalle: 'OT migrada a formato Command Center.' }
+              { fecha: ot.fechaInicio + ' 09:00', usuario: 'Rodolfo Garcés', accion: 'Migración', detalle: 'OT migrada a ORBI O&M Work Center.' }
             ],
             bloqueada: ot.estado === 'En espera de repuesto' || ot.estado === 'En espera de cliente' || ot.bloqueada,
             motivoBloqueo: ot.motivoBloqueo || (ot.estado === 'En espera de repuesto' ? 'Falta de repuesto crítico.' : ot.estado === 'En espera de cliente' ? 'Falta autorización cliente.' : ''),
@@ -1169,41 +1236,35 @@ const checkAndMigrateSchema = () => {
             bloqueoPorRecurso: ot.bloqueoPorRecurso !== undefined ? ot.bloqueoPorRecurso : false,
             observacionLogistica: ot.observacionLogistica || '',
             requiereAST: ot.requiereAST !== undefined ? ot.requiereAST : true,
-            astFirmado: ot.astFirmado !== undefined ? ot.astFirmado : (ot.estado === 'Finalizada' || ot.estado === 'Cerrada' || ot.estado === 'Lista para revisión' || ot.estado === 'En ejecución'),
+            astFirmado: ot.astFirmado !== undefined ? ot.astFirmado : false, // 17A: nunca se inventan firmas
             requierePermisoTrabajo: ot.requierePermisoTrabajo !== undefined ? ot.requierePermisoTrabajo : false,
             requiereValidacionHSE: ot.requiereValidacionHSE !== undefined ? ot.requiereValidacionHSE : (ot.tipo === 'HSE'),
-            validacionHSE: ot.validacionHSE || ((ot.estado === 'Finalizada' || ot.estado === 'Cerrada') ? 'Aprobado' : 'Pendiente'),
+            validacionHSE: ot.validacionHSE || 'Pendiente',
             requiereValidacionCalidad: ot.requiereValidacionCalidad !== undefined ? ot.requiereValidacionCalidad : (ot.tipo === 'Calidad'),
-            validacionCalidad: ot.validacionCalidad || ((ot.estado === 'Finalizada' || ot.estado === 'Cerrada') ? 'Aprobado' : 'Pendiente'),
+            validacionCalidad: ot.validacionCalidad || 'Pendiente',
             requiereEvidencia: ot.requiereEvidencia !== undefined ? ot.requiereEvidencia : true,
             requiereChecklist: ot.requiereChecklist !== undefined ? ot.requiereChecklist : true,
-            checklist: ot.checklist || defaultItems.map((item) => ({ item, completado: isDone })),
-            approvals: ot.approvals || (ot.estado === 'Cerrada' ? [
-              { rol: 'SUPERVISOR_TERRENO', nombre: ot.supervisor || 'Alejandro Rojas', fecha: ot.fechaInicio + ' 16:30', comentario: 'Trabajo ejecutado satisfactoriamente según el alcance.' },
-              { rol: 'COORDINADOR_OM', nombre: ot.coordinador || 'Rodolfo Garcés', fecha: ot.fechaInicio + ' 17:00', comentario: 'Evidencias y checklist correctos, se aprueba cierre técnico.' }
-            ] : []),
-            lifecycleHistory: ot.lifecycleHistory || [
-              { estadoAnterior: 'Borrador', estadoNuevo: 'Nueva', fecha: ot.fechaInicio + ' 08:30', usuario: 'Rodolfo Garcés', comentario: 'Creación automática de la OT.' },
-              { estadoAnterior: 'Nueva', estadoNuevo: ot.estado, fecha: ot.fechaInicio + ' 09:00', usuario: 'Rodolfo Garcés', comentario: 'Estado inicial del módulo.' }
-            ],
+            checklist: ot.checklist || defaultItems.map((item) => ({ item, completado: false })),
+            approvals: ot.approvals || [], // 17A: sin aprobaciones ni historial inventados
+            lifecycleHistory: ot.lifecycleHistory || [],
             closeSummary: ot.closeSummary || '',
             reopenedCount: ot.reopenedCount || 0,
             exportText: ot.exportText || '',
 
             // v0.1.2B fields
-            llegadaConfirmada: ot.llegadaConfirmada !== undefined ? ot.llegadaConfirmada : isFieldActive,
-            horaLlegadaSimulada: ot.horaLlegadaSimulada || (isFieldActive ? '09:12' : ''),
-            observacionLlegada: ot.observacionLlegada || (isFieldActive ? 'Llegada a planta dentro de ventana de trabajo.' : ''),
+            llegadaConfirmada: ot.llegadaConfirmada !== undefined ? ot.llegadaConfirmada : false,
+            horaLlegadaSimulada: ot.horaLlegadaSimulada || '',
+            observacionLlegada: ot.observacionLlegada || '',
             riesgosDetectadosTerreno: ot.riesgosDetectadosTerreno || '',
             condicionInseguraTerreno: ot.condicionInseguraTerreno || '',
-            permisoTrabajoNumero: ot.permisoTrabajoNumero || (ot.requierePermisoTrabajo && isFieldActive ? 'PT-2026-9481' : ''),
-            firmaEjecutorSimulada: ot.firmaEjecutorSimulada || (isDone ? ot.responsable : ''),
-            firmaSupervisorSimulada: ot.firmaSupervisorSimulada || (ot.estado === 'Cerrada' ? ot.supervisor : ''),
-            diagnosticoFinalTerreno: ot.diagnosticoFinalTerreno || (isDone ? 'Equipo intervenido y verificado operando bajo parámetros normales.' : ''),
-            accionRealizadaTerreno: ot.accionRealizadaTerreno || (isDone ? 'Pruebas dinámicas ejecutadas sin alarmas activas.' : ''),
-            resultadoTerreno: ot.resultadoTerreno || (isDone ? 'Exitoso' : undefined),
-            propuestaCierreTerreno: ot.propuestaCierreTerreno !== undefined ? ot.propuestaCierreTerreno : (ot.estado === 'Lista para revisión' || isDone),
-            comentarioPropuestaCierre: ot.comentarioPropuestaCierre || (ot.estado === 'Lista para revisión' ? 'Checklist completo y evidencias cargadas. Solicito cierre.' : ''),
+            permisoTrabajoNumero: ot.permisoTrabajoNumero || '',
+            firmaEjecutorSimulada: ot.firmaEjecutorSimulada || '',
+            firmaSupervisorSimulada: ot.firmaSupervisorSimulada || '',
+            diagnosticoFinalTerreno: ot.diagnosticoFinalTerreno || '',
+            accionRealizadaTerreno: ot.accionRealizadaTerreno || '',
+            resultadoTerreno: ot.resultadoTerreno,
+            propuestaCierreTerreno: ot.propuestaCierreTerreno !== undefined ? ot.propuestaCierreTerreno : false,
+            comentarioPropuestaCierre: ot.comentarioPropuestaCierre || '',
             checklistExecution,
             evidencePack
           };
@@ -1925,157 +1986,137 @@ export const loadPlantas = (): Planta[] => {
 
 export const savePlantas = (data: Planta[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.PLANTAS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.PLANTAS, data);
   }
 };
 
 export const loadOTs = (): OT[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.OTS);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.OTS, JSON.stringify(INITIAL_OTS));
+    return readStorageCollection(STORAGE_KEYS.OTS, INITIAL_OTS);
   }
   return INITIAL_OTS;
 };
 
 export const saveOTs = (data: OT[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.OTS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.OTS, data);
   }
 };
 
 export const loadHSECalidad = (): HSEFinding[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.HSE_CALIDAD);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.HSE_CALIDAD, JSON.stringify(INITIAL_HSE_CALIDAD));
+    return readStorageCollection(STORAGE_KEYS.HSE_CALIDAD, INITIAL_HSE_CALIDAD);
   }
   return INITIAL_HSE_CALIDAD;
 };
 
 export const saveHSECalidad = (data: HSEFinding[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.HSE_CALIDAD, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.HSE_CALIDAD, data);
   }
 };
 
 export const loadPlanificacion = (): PlanPreventivo[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.PLANIFICACION);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.PLANIFICACION, JSON.stringify(INITIAL_PLANIFICACION));
+    return readStorageCollection(STORAGE_KEYS.PLANIFICACION, INITIAL_PLANIFICACION);
   }
   return INITIAL_PLANIFICACION;
 };
 
 export const savePlanificacion = (data: PlanPreventivo[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.PLANIFICACION, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.PLANIFICACION, data);
   }
 };
 
 export const loadVehiculos = (): Vehiculo[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.VEHICULOS);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.VEHICULOS, JSON.stringify(INITIAL_VEHICULOS));
+    return readStorageCollection(STORAGE_KEYS.VEHICULOS, INITIAL_VEHICULOS);
   }
   return INITIAL_VEHICULOS;
 };
 
 export const saveVehiculos = (data: Vehiculo[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.VEHICULOS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.VEHICULOS, data);
   }
 };
 
 export const loadRecursosPersonas = (): RecursoPersona[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.RECURSOS_PERSONAS);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.RECURSOS_PERSONAS, JSON.stringify(INITIAL_RECURSOS_PERSONAS));
+    return readStorageCollection(STORAGE_KEYS.RECURSOS_PERSONAS, INITIAL_RECURSOS_PERSONAS);
   }
   return INITIAL_RECURSOS_PERSONAS;
 };
 
 export const saveRecursosPersonas = (data: RecursoPersona[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.RECURSOS_PERSONAS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.RECURSOS_PERSONAS, data);
   }
 };
 
 export const loadRepuestos = (): Repuesto[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.DB_REPUESTOS);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.DB_REPUESTOS, JSON.stringify(INITIAL_REPUESTOS));
+    return readStorageCollection(STORAGE_KEYS.DB_REPUESTOS, INITIAL_REPUESTOS);
   }
   return INITIAL_REPUESTOS;
 };
 
 export const saveRepuestos = (data: Repuesto[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.DB_REPUESTOS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.DB_REPUESTOS, data);
   }
 };
 
 export const loadHerramientas = (): Herramienta[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.DB_HERRAMIENTAS);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.DB_HERRAMIENTAS, JSON.stringify(INITIAL_HERRAMIENTAS));
+    return readStorageCollection(STORAGE_KEYS.DB_HERRAMIENTAS, INITIAL_HERRAMIENTAS);
   }
   return INITIAL_HERRAMIENTAS;
 };
 
 export const saveHerramientas = (data: Herramienta[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.DB_HERRAMIENTAS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.DB_HERRAMIENTAS, data);
   }
 };
 
 export const loadAuditLog = (): AuditLogEvent[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.DB_AUDIT_LOG);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.DB_AUDIT_LOG, JSON.stringify(INITIAL_AUDIT_LOG));
+    return readStorageCollection(STORAGE_KEYS.DB_AUDIT_LOG, INITIAL_AUDIT_LOG);
   }
   return INITIAL_AUDIT_LOG;
 };
 
 export const saveAuditLog = (data: AuditLogEvent[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.DB_AUDIT_LOG, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.DB_AUDIT_LOG, data);
   }
 };
 
 export const loadEscalaciones = (): Escalation[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.DB_ESCALAMIENTOS);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.DB_ESCALAMIENTOS, JSON.stringify(INITIAL_ESCALACIONES));
+    return readStorageCollection(STORAGE_KEYS.DB_ESCALAMIENTOS, INITIAL_ESCALACIONES);
   }
   return INITIAL_ESCALACIONES;
 };
 
 export const saveEscalaciones = (data: Escalation[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.DB_ESCALAMIENTOS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.DB_ESCALAMIENTOS, data);
   }
 };
 
 export const loadPtws = (): PTW[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.DB_PTW);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.DB_PTW, JSON.stringify(INITIAL_PTWS));
+    return readStorageCollection(STORAGE_KEYS.DB_PTW, INITIAL_PTWS);
   }
   return INITIAL_PTWS;
 };
 
 export const savePtws = (data: PTW[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.DB_PTW, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.DB_PTW, data);
   }
 };
 
@@ -2334,30 +2375,26 @@ export const INITIAL_INVENTORY_MOVEMENTS: OMInventoryMovement[] = [
 
 export const loadInventory = (): OMInventoryItem[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.DB_INVENTORY);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.DB_INVENTORY, JSON.stringify(INITIAL_INVENTORY));
+    return readStorageCollection(STORAGE_KEYS.DB_INVENTORY, INITIAL_INVENTORY);
   }
   return INITIAL_INVENTORY;
 };
 
 export const saveInventory = (data: OMInventoryItem[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.DB_INVENTORY, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.DB_INVENTORY, data);
   }
 };
 
 export const loadInventoryMovements = (): OMInventoryMovement[] => {
   if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(STORAGE_KEYS.DB_INVENTORY_MOVEMENTS);
-    if (data) return JSON.parse(data);
-    localStorage.setItem(STORAGE_KEYS.DB_INVENTORY_MOVEMENTS, JSON.stringify(INITIAL_INVENTORY_MOVEMENTS));
+    return readStorageCollection(STORAGE_KEYS.DB_INVENTORY_MOVEMENTS, INITIAL_INVENTORY_MOVEMENTS);
   }
   return INITIAL_INVENTORY_MOVEMENTS;
 };
 
 export const saveInventoryMovements = (data: OMInventoryMovement[]) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.DB_INVENTORY_MOVEMENTS, JSON.stringify(data));
+    writeStorageCollection(STORAGE_KEYS.DB_INVENTORY_MOVEMENTS, data);
   }
 };

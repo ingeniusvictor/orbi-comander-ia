@@ -8,6 +8,13 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import { openDb, backupDb, dataDir } from './server/db';
+import { sessionMiddleware, requireAuth, requireCsrfHeader, purgeExpiredSessions, countUsers } from './server/auth';
+import { createApiRouter } from './server/routes';
+import { seedIfEmpty } from './server/repo';
+import { runPmGeneration } from './server/pm';
+import { programarAlarmas } from './server/alarmas';
+import fs from 'node:fs';
 
 dotenv.config();
 
@@ -65,7 +72,38 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
 
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '256kb' }));
+  // Detrás de un proxy HTTPS (nginx, Caddy, balanceador) usar TRUST_PROXY=1 para que req.ip sea el del cliente
+  if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+
+  // 17A — Fase 1: base de datos, sesiones y carga inicial
+  const db = openDb();
+  const seed = seedIfEmpty(db, process.env.ORBI_SEED_DEMO === 'true');
+  if (seed.ots || seed.collections.length) {
+    console.log(`[ORBI] Carga inicial: ${seed.ots} OTs, ${seed.collections.length} colecciones (demo=${process.env.ORBI_SEED_DEMO === 'true'}).`);
+  }
+  if (countUsers(db) === 0) {
+    console.warn('[ORBI] No hay usuarios. Crea el primero con: npm run user -- create <usuario> <ROL> "<Nombre como en las OTs>"');
+  }
+  scheduleBackups(db);
+  // Fase 2: generación de OTs preventivas al iniciar y cada 24 h
+  const pmRun = () => {
+    try {
+      const { creadas } = runPmGeneration(db);
+      if (creadas.length) console.log(`[ORBI] OTs preventivas generadas: ${creadas.join(', ')}`);
+    } catch (error) {
+      console.error('[ORBI] Falló la generación de preventivos:', error);
+    }
+  };
+  pmRun();
+  setInterval(pmRun, 24 * 60 * 60 * 1000).unref();
+  setInterval(() => purgeExpiredSessions(db), 60 * 60 * 1000).unref();
+  // 17D: alarmas de VCOM → correctivos (solo si el portal O&M está configurado)
+  if (programarAlarmas(db)) console.log('[ORBI] Revisión de alarmas VCOM activada.');
+
+  // JSON global de 256 kb; las colecciones compartidas tienen su propio límite (2 MB)
+  const jsonParser = express.json({ limit: '256kb' });
+  app.use((req, res, next) => (req.path.startsWith('/api/collections/') ? next() : jsonParser(req, res, next)));
+  app.use(sessionMiddleware(db));
 
   // Cabeceras básicas de seguridad HTTP
   app.use((_req, res, next) => {
@@ -89,8 +127,15 @@ async function startServer() {
   });
 
   // Endpoint analítico ejecutivo para Insight Center & Foton Prime IA
-  app.post('/api/bi/reporte-ia', async (req: express.Request, res: express.Response) => {
-    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+  const requireManagement: express.RequestHandler = (req, res, next) => {
+    if (!req.user || !['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADOR_OM'].includes(req.user.role)) {
+      res.status(403).json({ error: 'Reporte disponible solo para gestión.' });
+      return;
+    }
+    next();
+  };
+  app.post('/api/bi/reporte-ia', requireCsrfHeader, requireAuth, requireManagement, async (req: express.Request, res: express.Response) => {
+    const clientIp = `user:${req.user!.id}`;
     if (isRateLimited(clientIp)) {
       return res.status(429).json({
         error: 'Límite de solicitudes excedido (máx. 20 reportes por minuto). Intente nuevamente en unos segundos.',
@@ -176,6 +221,9 @@ Consulta del usuario: ${rawPrompt || 'Generar Reporte Gerencial Integrado'}`,
     }
   });
 
+  // API del piloto (sesión, OTs, colecciones, auditoría, fotos)
+  app.use('/api', createApiRouter(db));
+
   // Vite middleware en desarrollo / archivos estáticos compilados en producción
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -185,6 +233,11 @@ Consulta del usuario: ${rawPrompt || 'Generar Reporte Gerencial Integrado'}`,
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    // El service worker debe revisarse en cada visita para que las actualizaciones lleguen a los teléfonos
+    app.get('/sw.js', (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(distPath, 'sw.js'));
+    });
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -192,8 +245,25 @@ Consulta del usuario: ${rawPrompt || 'Generar Reporte Gerencial Integrado'}`,
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[ORBI Command Center] Servidor activo en http://localhost:${PORT}`);
+    console.log(`[ORBI Work Center] Servidor activo en http://localhost:${PORT}`);
   });
+}
+
+/** Respaldo al iniciar y cada 24 h (VACUUM INTO, seguro con WAL); conserva los últimos 14. */
+function scheduleBackups(db: ReturnType<typeof openDb>) {
+  const run = () => {
+    try {
+      const file = backupDb(db);
+      const dir = `${dataDir()}/backups`;
+      const old = fs.readdirSync(dir).filter(f => f.endsWith('.sqlite')).sort().slice(0, -14);
+      for (const f of old) fs.unlinkSync(`${dir}/${f}`);
+      console.log(`[ORBI] Respaldo creado: ${file}`);
+    } catch (error) {
+      console.error('[ORBI] Falló el respaldo de la base de datos:', error);
+    }
+  };
+  run();
+  setInterval(run, 24 * 60 * 60 * 1000).unref();
 }
 
 startServer();

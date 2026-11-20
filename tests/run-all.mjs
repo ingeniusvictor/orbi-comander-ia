@@ -1,5 +1,5 @@
 /**
- * Suite de Pruebas Automatizadas — ORBI O&M Command Center IA
+ * Suite de Pruebas Automatizadas — ORBI O&M Work Center
  * Ejecutable directamente con `npm test` (node tests/run-all.mjs) sin dependencias externas.
  */
 

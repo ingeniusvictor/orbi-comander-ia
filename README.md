@@ -1,4 +1,4 @@
-# ORBI O&M Command Center IA
+# ORBI O&M Work Center
 
 Plataforma integral de comando operacional para **Operación y Mantenimiento (O&M) de Plantas Fotovoltaicas**. Conecta planificación de cuadrillas, ejecución móvil en terreno, control de permisos de trabajo seguro (PTW / AST / LOTO), inventario segmentado por planta, trazabilidad documental y analítica ejecutiva asistida por IA.
 

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { notify } from './Toaster';
 import {
   Users,
   Plus,
@@ -151,7 +152,7 @@ export default function Organigrama({
 
   const handleSaveAdd = () => {
     if (!newPersona.name || !newPersona.role) {
-      alert('Por favor ingrese al menos Nombre y Rol.');
+      notify('Por favor ingrese al menos Nombre y Rol.');
       return;
     }
     const personaToAdd: Persona = {
