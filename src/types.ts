@@ -240,6 +240,9 @@ export interface OT {
   otsSeguimiento?: string[];
   /** 17B: quién reportó el hallazgo (lo fija el servidor con el usuario de la sesión). */
   reportadoPor?: string;
+  /** 17B: fecha objetivo del contrato (preventivos) y último día en que aún se cumple (objetivo + margen). */
+  fechaObjetivo?: string;
+  fechaObjetivoLimite?: string;
   /** 17B: quién aprobó la OT (salida de "Espera aprobación") y cuándo; lo fija la máquina de estados. */
   aprobadaPor?: string;
   fechaAprobacion?: string;

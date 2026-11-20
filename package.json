@@ -11,7 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "validate:data": "tsx src/data/validateData.ts",
-    "test": "node tests/run-all.mjs && tsx --test tests/otStateMachine.test.ts tests/server.test.ts tests/cmms.test.ts tests/seguimiento.test.ts tests/e2e-api.test.ts",
+    "test": "node tests/run-all.mjs && tsx --test tests/otStateMachine.test.ts tests/server.test.ts tests/cmms.test.ts tests/seguimiento.test.ts tests/plazos.test.ts tests/e2e-api.test.ts",
     "verify": "npm run lint && npm run validate:data && npm test",
     "user": "tsx server/cli.ts",
     "user:prod": "node dist/cli.cjs",

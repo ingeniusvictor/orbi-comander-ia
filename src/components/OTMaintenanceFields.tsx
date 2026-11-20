@@ -11,6 +11,7 @@ import { localIsoDate, assetPath, hoursBetween, totalLaborHours, validateLaborLi
 import { softwrenchCodeOf } from '../domain/otStateMachine';
 import { loadAssets, loadCodes } from '../data/cmmsStore';
 import { followUpsOf } from '../domain/seguimiento';
+import { plazoDe, ETIQUETA_PLAZO } from '../domain/plazos';
 
 import Button from './ui/Button';
 interface Props {
@@ -86,6 +87,19 @@ export default function OTMaintenanceFields({ ot, ots = [], onChange, userName, 
           })}
         </div>
       )}
+
+      {/* 17B: plazo (fecha objetivo del contrato o fecha límite) */}
+      {(() => {
+        const p = plazoDe(ot, today);
+        if (p.estado === 'sin_plazo' || p.estado === 'cancelada') return null;
+        const tono = p.estado === 'vencida' || p.estado === 'cumplida_con_atraso' ? 'text-danger' : p.estado === 'por_vencer' ? 'text-warn' : 'text-ok';
+        return (
+          <div className="text-sm text-slate-300">
+            {ot.fechaObjetivo ? <>Fecha objetivo del contrato <span className="font-mono">{ot.fechaObjetivo}</span>, plazo hasta <span className="font-mono">{p.limite}</span></> : <>Plazo hasta <span className="font-mono">{p.limite}</span></>}
+            {' · '}<span className={`font-semibold ${tono}`}>{ETIQUETA_PLAZO[p.estado]}{p.atraso ? ` (${p.atraso} días de atraso)` : ''}</span>
+          </div>
+        );
+      })()}
 
       {/* 17B: cobro al cliente */}
       {puedeCobrar ? (

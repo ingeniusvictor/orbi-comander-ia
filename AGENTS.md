@@ -527,6 +527,11 @@ Before approving any subsequent build or turn, verify the following 12 test path
   - Pestaña "Por aprobar (n)" en OT Center (`src/components/BandejaAprobacion.tsx`): más antiguas primero, días de espera (ámbar desde 15, rojo desde 30), filtro por planta, aprobar y asignar, rechazar con motivo, marcar cobrable.
   - Campos `cobrable`, `cobrableReferencia` (los marca coordinación o jefatura; también en la ficha de la OT) y `cobrableDetalle` (quién y cuándo, lo fija el servidor y queda en el historial).
   - Pruebas: 2 unitarias en `tests/seguimiento.test.ts`, 1 de API y paso 10 de `tests/e2e/piloto.spec.ts`.
+- **Punto 3 HECHO — fecha objetivo del contrato y plazos:**
+  - Planes preventivos con `toleranciaDias` (margen del contrato; por defecto según periodicidad: `TOLERANCIA_POR_DEFECTO` en `src/domain/cmms.ts`, editable en "Activos y Preventivos"). Cada OT generada lleva `fechaObjetivo` (como Target Start de SoftWrench) y `fechaObjetivoLimite`; su `fechaLimite` es ese mismo límite.
+  - Dominio `src/domain/plazos.ts`: estado del plazo (a tiempo, por vencer a 3 días, vencida, ejecutada a tiempo o con atraso). La ejecución se mide con el primer paso a ejecutada/en revisión/cerrada, no con el cierre administrativo. Sin fecha objetivo se usa la fecha límite.
+  - Pestaña "Plazos" en OT Center (`src/components/TableroPlazos.tsx`): vencidas, por vencer, cumplimiento a tiempo y activas, por planta o por cliente (cliente desde la matriz de plantas), listas de vencidas y por vencer. La ficha de la OT muestra su plazo.
+  - Pruebas: `tests/plazos.test.ts` y paso 11 de `tests/e2e/piloto.spec.ts`.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)

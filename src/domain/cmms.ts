@@ -212,6 +212,8 @@ export interface PmPlan {
   proximaFecha: string;
   /** Días de anticipación con que se genera la OT antes de la fecha. */
   anticipacionDias: number;
+  /** 17B: margen del contrato (días después de la fecha objetivo en que aún se cumple). Por defecto según periodicidad. */
+  toleranciaDias?: number;
   plantillaIds: string[];
   responsable?: string;
   supervisor?: string;
@@ -246,6 +248,21 @@ export function addPeriod(fecha: string, periodicidad: Periodicidad): string {
   return toIsoDate(target);
 }
 
+/** 17B: margen por defecto del contrato según la periodicidad (días después de la fecha objetivo). */
+export const TOLERANCIA_POR_DEFECTO: Record<Periodicidad, number> = {
+  semanal: 2, quincenal: 3, mensual: 7, bimestral: 10, trimestral: 15, cuatrimestral: 15, semestral: 30, anual: 30, bianual: 60,
+};
+
+export function toleranciaDe(p: Pick<PmPlan, 'periodicidad' | 'toleranciaDias'>): number {
+  return Number.isInteger(p.toleranciaDias) && (p.toleranciaDias as number) >= 0 ? (p.toleranciaDias as number) : TOLERANCIA_POR_DEFECTO[p.periodicidad] ?? 7;
+}
+
+export function addDaysIso(fecha: string, dias: number): string {
+  const d = new Date(`${fecha}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return toIsoDate(d);
+}
+
 export function validatePlan(p: PmPlan, templates: ChecklistTemplate[], others: PmPlan[] = []): string[] {
   const errors: string[] = [];
   if (others.some(o => o.id !== p.id && o.codigo.trim() === p.codigo.trim())) errors.push(`Ya existe otro plan con el número ${p.codigo}.`);
@@ -254,6 +271,9 @@ export function validatePlan(p: PmPlan, templates: ChecklistTemplate[], others: 
   if (!PERIODICIDADES[p.periodicidad]) errors.push(`Periodicidad inválida: ${p.periodicidad}`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(p.proximaFecha)) errors.push('La próxima fecha debe tener formato AAAA-MM-DD.');
   if (!(p.hhEstimadas > 0)) errors.push('Las HH estimadas deben ser mayores a 0.');
+  if (p.toleranciaDias != null && (!Number.isInteger(p.toleranciaDias) || p.toleranciaDias < 0 || p.toleranciaDias > 365)) {
+    errors.push('El margen del contrato debe ser un número entero de días entre 0 y 365.');
+  }
   for (const id of p.plantillaIds) {
     if (!templates.some(t => t.id === id)) errors.push(`Plantilla inexistente: ${id}`);
   }
@@ -314,7 +334,10 @@ export function generateDuePmOTs(args: {
           supervisor: next.supervisor || '',
           fechaInicio: fecha,
           fechaProgramada: fecha,
-          fechaLimite: addPeriod(fecha, 'semanal'),
+          // 17B: fecha objetivo del contrato (como Target Start en SoftWrench) y su margen
+          fechaObjetivo: fecha,
+          fechaObjetivoLimite: addDaysIso(fecha, toleranciaDe(next)),
+          fechaLimite: addDaysIso(fecha, toleranciaDe(next)),
           estado,
           avance: 0,
           hhEstimadas: next.hhEstimadas,

@@ -9,7 +9,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Boxes, CalendarClock, ClipboardList, Tags, Plus, Upload, Play, Save, X } from 'lucide-react';
 import type { Planta } from '../types';
 import {
-  ASSET_TYPES, PERIODICIDADES, DEFAULT_CODES, assetPath, validateAssets, parseAssetsCsv, validatePlan, validateTemplate, localIsoDate,
+  ASSET_TYPES, PERIODICIDADES, DEFAULT_CODES, assetPath, validateAssets, parseAssetsCsv, validatePlan, validateTemplate, localIsoDate, TOLERANCIA_POR_DEFECTO,
   type Asset, type AssetType, type ChecklistTemplate, type ChecklistTemplateItem, type PmPlan, type Periodicidad, type CmmsCodes,
 } from '../domain/cmms';
 import { writeStorageCollection } from '../data/storage';
@@ -319,6 +319,9 @@ function PlansTab({ plans, templates, assets, plantas, canEdit, onSave, onMessag
               <input type="date" className={input} value={editing.proximaFecha} onChange={e => setEditing({ ...editing, proximaFecha: e.target.value })} /></label>
             <label className="space-y-1"><span className="text-slate-400">Generar con anticipación (días)</span>
               <input type="number" min={0} className={input} value={editing.anticipacionDias} onChange={e => setEditing({ ...editing, anticipacionDias: Number(e.target.value) })} /></label>
+            <label className="space-y-1"><span className="text-slate-400">Margen del contrato (días tras la fecha objetivo)</span>
+              <input type="number" min={0} max={365} className={input} placeholder={`Por defecto ${TOLERANCIA_POR_DEFECTO[editing.periodicidad] ?? 7}`}
+                value={editing.toleranciaDias ?? ''} onChange={e => setEditing({ ...editing, toleranciaDias: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
             <label className="space-y-1"><span className="text-slate-400">Técnico responsable (como en las OTs)</span>
               <input className={input} value={editing.responsable || ''} onChange={e => setEditing({ ...editing, responsable: e.target.value })} /></label>
             <label className="space-y-1"><span className="text-slate-400">Supervisor</span>

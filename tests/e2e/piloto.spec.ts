@@ -234,3 +234,21 @@ test('10. el Jefe O&M aprueba el correctivo desde "Por aprobar" y lo asigna (17B
   }, { timeout: 15_000 }).toMatch(/^Asignada\|Víctor León\|/);
   await ctx.close();
 });
+
+test('11. el Jefe O&M revisa el tablero de plazos (17B)', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-CL' });
+  const jefe = await ctx.newPage();
+  await login(jefe, E2E_USERS.jefe);
+  await jefe.getByRole('button', { name: 'ORBI OT Center' }).click();
+  await jefe.getByRole('tab', { name: 'Plazos' }).click();
+  await expect(jefe.getByText('Cumplimiento a tiempo')).toBeVisible();
+  // La OT del plan mensual muestra su fecha objetivo del contrato
+  await expect(jefe.getByRole('rowheader', { name: 'Cantillana' }).first()).toBeVisible();
+  await jefe.getByLabel('Agrupar por').selectOption('cliente');
+  await shot(jefe, '09-plazos');
+  const res = await jefe.request.get('/api/ots', { headers: { 'X-ORBI-Request': '1' } });
+  const pm = ((await res.json()).ots as any[]).find(o => o.codigo === OT_PM);
+  expect(pm.fechaObjetivo).toBe('2026-11-28');
+  expect(pm.fechaObjetivoLimite).toBeTruthy();
+  await ctx.close();
+});
