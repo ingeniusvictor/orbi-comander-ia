@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import { 
   Calendar as CalendarIcon, 
   User, 
@@ -187,7 +188,7 @@ export default function SchedulerIA({
         comentario: `Programada para ${scheduleDate} ${scheduleTime}`
       }, patch);
       if (result.ok === false) {
-        alert(result.error);
+        notify(result.error);
         return;
       }
       scheduled = result.ot;

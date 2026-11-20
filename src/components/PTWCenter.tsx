@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { notify } from './Toaster';
 import {
   FileText,
   Search,
@@ -192,7 +193,7 @@ export default function PTWCenter({
   // Crear permiso mock
   const handleSavePtw = () => {
     if (!newPtw.codigo || !newPtw.plantaId || selectedOtsInForm.length === 0) {
-      alert('Por favor complete los campos obligatorios: Código de Permiso, Planta y al menos 1 OT vinculada.');
+      notify('Por favor complete los campos obligatorios: Código de Permiso, Planta y al menos 1 OT vinculada.');
       return;
     }
 
@@ -300,7 +301,7 @@ export default function PTWCenter({
   // Acciones de firmas en el visualizador (Mock)
   const handleSignOpeningTech = (ptw: PTW) => {
     if (!techSignatureName.trim()) {
-      alert('Por favor ingrese el nombre para firmar.');
+      notify('Por favor ingrese el nombre para firmar.');
       return;
     }
     const updated = ptws.map(p => {
@@ -345,7 +346,7 @@ export default function PTWCenter({
 
   const handleSignOpeningSupervisor = (ptw: PTW) => {
     if (!supSignatureName.trim()) {
-      alert('Por favor ingrese el nombre para firmar.');
+      notify('Por favor ingrese el nombre para firmar.');
       return;
     }
     const updated = ptws.map(p => {
@@ -388,7 +389,7 @@ export default function PTWCenter({
 
   const handleSignClosingTech = (ptw: PTW) => {
     if (!techSignatureName.trim()) {
-      alert('Por favor ingrese el nombre para firmar.');
+      notify('Por favor ingrese el nombre para firmar.');
       return;
     }
     const updated = ptws.map(p => {
@@ -497,7 +498,7 @@ export default function PTWCenter({
             onClick={() => setIsCreating(true)}
             className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold font-mono text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-lg"
           >
-            <PlusCircle className="h-4 w-4" /> Crear PTS Mock
+            <PlusCircle className="h-4 w-4" /> Crear permiso de trabajo
           </button>
         )}
       </div>
@@ -1094,7 +1095,7 @@ export default function PTWCenter({
             >
               <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950/40">
                 <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
-                  <Plus className="h-4 w-4 text-emerald-400" /> Crear Nuevo Permiso de Trabajo (PTS) Mock
+                  <Plus className="h-4 w-4 text-emerald-400" /> Crear nuevo permiso de trabajo (PTS)
                 </h3>
                 <button
                   onClick={() => setIsCreating(false)}

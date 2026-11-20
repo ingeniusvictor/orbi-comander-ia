@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import {
   AlertTriangle,
   Search,
@@ -108,7 +109,7 @@ export default function EscalationCenter({
 
   const handleCreate = () => {
     if (!newEsc.tipo || !newEsc.comentario) {
-      alert('Por favor complete la descripción o comentario de la situación de riesgo.');
+      notify('Por favor complete la descripción o comentario de la situación de riesgo.');
       return;
     }
 

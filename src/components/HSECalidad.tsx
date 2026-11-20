@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import {
   ShieldAlert,
   AlertTriangle,
@@ -81,7 +82,7 @@ export default function HSECalidad({
 
   const handleSaveReport = () => {
     if (!newFinding.descripcion) {
-      alert('Por favor describa el hallazgo o condición insegura.');
+      notify('Por favor describa el hallazgo o condición insegura.');
       return;
     }
     const targetPlanta = plantas.find((p) => p.id === newFinding.plantaId);

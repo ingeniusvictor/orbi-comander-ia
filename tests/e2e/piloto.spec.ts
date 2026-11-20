@@ -142,3 +142,34 @@ test('6. el Jefe O&M ve los planes y el trabajo del técnico', async ({ browser 
   expect(audit.events.some((e: any) => e.usuarioRol.startsWith('Víctor León') && /Evidencia/.test(e.accion))).toBeTruthy();
   await ctx.close();
 });
+
+test('7. terreno legible: botones de 44 px, sin letra menor a 12 px y modo sol que se recuerda', async () => {
+  await tecnico.goto('/');
+  await tecnico.getByText(OT_PM).click();
+  await tecnico.getByRole('button', { name: 'Checklist', exact: true }).click();
+  // Botones de estado del checklist: al menos 44 px de alto (uso con guantes)
+  const hecho = tecnico.getByRole('button', { name: /Hecho/ }).first();
+  const caja = await hecho.boundingBox();
+  expect(caja!.height).toBeGreaterThanOrEqual(44);
+  // Ningún texto visible de la vista de terreno bajo 12 px
+  const minimo = await tecnico.evaluate(() => {
+    const raiz = document.getElementById('vista-terreno-container')!;
+    let min = 99;
+    raiz.querySelectorAll('*').forEach(el => {
+      const e = el as HTMLElement;
+      if (!e.offsetParent || !e.childNodes.length || ![...e.childNodes].some(n => n.nodeType === 3 && n.textContent!.trim())) return;
+      min = Math.min(min, parseFloat(getComputedStyle(e).fontSize));
+    });
+    return min;
+  });
+  expect(minimo).toBeGreaterThanOrEqual(12);
+  // Modo sol: tema claro que se mantiene al recargar
+  await tecnico.getByRole('button', { name: 'Modo sol' }).first().click();
+  await expect(tecnico.locator('#vista-terreno-container')).toHaveClass(/tema-sol/);
+  await tecnico.waitForTimeout(500); // esperar el fin de la transición de colores
+  await shot(tecnico, '06-modo-sol');
+  await tecnico.reload();
+  await expect(tecnico.locator('#vista-terreno-container')).toHaveClass(/tema-sol/);
+  await tecnico.getByRole('button', { name: 'Modo oscuro' }).first().click();
+  await expect(tecnico.locator('#vista-terreno-container')).not.toHaveClass(/tema-sol/);
+});

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { notify } from './Toaster';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -224,14 +225,14 @@ export default function Workspace({
       const code = answer?.trim().toUpperCase();
       if (!code) return null;
       if (!codes.some(c => c.codigo === code)) {
-        alert(`Código de espera desconocido: ${code}`);
+        notify(`Código de espera desconocido: ${code}`);
         return null;
       }
       patch = { ...patch, motivoEsperaCodigo: code };
     }
     const result = transitionOT(o, to, { usuario: username, rol: userRole as RoleType, comentario, escalaciones: escalas }, patch);
     if (result.ok === false) {
-      alert(result.error);
+      notify(result.error);
       return null;
     }
     return result.ot;
@@ -2228,7 +2229,7 @@ export default function Workspace({
                             <button
                               onClick={() => {
                                 const res = transitionOT(selectedOt, 'Finalizada', { usuario: username, rol: userRole as RoleType, comentario: 'Finalizada desde Workspace', escalaciones: escalas });
-                                if (res.ok === false) { alert(res.error); return; }
+                                if (res.ok === false) { notify(res.error); return; }
                                 const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? res.ot : o);
                                 if (onUpdateOts) onUpdateOts(updatedOts);
                                 setSelectedOt(res.ot);
@@ -2252,7 +2253,7 @@ export default function Workspace({
                             <button
                               onClick={() => {
                                 const res = transitionOT(selectedOt, 'Cerrada', { usuario: username, rol: userRole as RoleType, comentario: 'Cierre administrativo desde Workspace', escalaciones: escalas });
-                                if (res.ok === false) { alert(res.error); return; }
+                                if (res.ok === false) { notify(res.error); return; }
                                 const updatedOts = ots.map(o => o.codigo === selectedOt.codigo ? res.ot : o);
                                 if (onUpdateOts) onUpdateOts(updatedOts);
                                 setSelectedOt(res.ot);

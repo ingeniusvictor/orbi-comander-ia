@@ -500,6 +500,9 @@ Before approving any subsequent build or turn, verify the following 12 test path
     - Correcciones encontradas: Vista Terreno a pantalla completa en teléfonos; auditoría sin señal en cola.
     - Guía para gerencia: `docs/GUIA_PRUEBA_PILOTO.md`.
     - **Regla para agentes:** antes de dar por terminado un cambio que toque OTs, sincronización o Vista Terreno, ejecutar `npm test` y `npm run e2e`.
+  - **Fase 5 — UX premium (EN CURSO):** auditoría en `docs/AUDITORIA_UX_PREMIUM.md` (P0, P1, P2). **P0 hecho:** menú móvil sólido, sin jerga interna ni textos falsos en la interfaz, tono 850 definido, fuentes locales con Space Grotesk en títulos, sin notas de arquitectura visibles. **P1 hecho:** terreno con botones de 44 px y letra mínima de 12 px (prueba automática 7 en `tests/e2e/piloto.spec.ts`), contraste AA, "Modo sol" (`.tema-sol` en `src/index.css`), avisos propios `notify()` (`src/components/Toaster.tsx`) en lugar de `alert()`, foco visible y etiquetas accesibles.
+    - **Regla para agentes:** no usar `alert()`; usar `notify()`. En Vista Terreno, nada interactivo bajo 44 px ni texto bajo 12 px.
+    - **Regla para agentes:** no mostrar al usuario versiones internas, estados "FROZEN/Sandbox/Mock", nombres de tecnologías no usadas ni notas de arquitectura; si un dato es simulado, decirlo en una frase clara en español.
 - **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 

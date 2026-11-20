@@ -143,6 +143,12 @@ export default function App() {
 
   // Menú lateral móvil
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsSidebarOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isSidebarOpen]);
 
   // Hora del sistema (Estática de la telemetría O&M o dinámica)
   const [systemTime, setSystemTime] = useState<string>('');
@@ -578,21 +584,26 @@ export default function App() {
       {/* CUERPO PRINCIPAL DEL PANEL */}
       <div className="flex-1 flex relative">
         
-        {/* SIDEBAR NAVEGACIÓN DESKTOP & MOBILE */}
+        {/* 17A UX P0: en teléfono el menú es un panel sólido sobre una capa oscura (antes era transparente) */}
+        {isSidebarOpen && (
+          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-30 lg:hidden" onClick={() => setIsSidebarOpen(false)} aria-hidden="true" />
+        )}
         <aside
-          className={`bg-slate-900/40 border-r border-slate-800/80 w-64 flex flex-col justify-between p-4 z-30 transition-all duration-300 ${
+          aria-label="Menú principal"
+          className={`border-r border-slate-800/80 w-64 flex-col justify-between p-4 ${
             isSidebarOpen
-              ? 'fixed inset-y-0 left-0 bg-slate-900 w-64'
-              : 'hidden lg:flex'
+              ? 'fixed inset-y-0 left-0 z-40 flex bg-slate-900 shadow-2xl shadow-black/60 lg:static lg:z-auto lg:shadow-none lg:bg-slate-900/40'
+              : 'hidden lg:flex bg-slate-900/40'
           }`}
         >
           {/* Botón de cierre para celular */}
           {isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 p-1 rounded-lg border border-slate-850 lg:hidden"
+              aria-label="Cerrar menú"
+              className="absolute top-3 right-3 text-slate-300 p-2.5 rounded-lg border border-slate-700 lg:hidden"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
           )}
 
@@ -623,7 +634,8 @@ export default function App() {
                           setPassedFilters(null);
                           setIsSidebarOpen(false);
                         }}
-                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium font-mono tracking-wide transition-all ${
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-medium transition-all ${
                           isActive
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                             : 'text-slate-400 hover:text-white hover:bg-slate-900/40 border border-transparent'
@@ -639,17 +651,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Información de la Configuración y Seguridad */}
-          <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-900">
-            <span className="text-[9px] font-mono text-emerald-400 block mb-1 uppercase tracking-wider">Mapeo de Integración</span>
-            <p className="text-[10px] text-slate-500 leading-normal mb-2">
-              Bases de datos estructuradas e independientes preparadas para conexión persistente remota.
-            </p>
-            <div className="flex flex-wrap gap-1 text-[8px] font-mono">
-              <span className="bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-850">LocalState</span>
-              <span className="bg-slate-900 text-slate-400 px-1.5 py-0.5 rounded border border-slate-850">Firebase Ready</span>
-            </div>
-          </div>
         </aside>
 
         {/* AREA DE CONTENIDO PRINCIPAL */}

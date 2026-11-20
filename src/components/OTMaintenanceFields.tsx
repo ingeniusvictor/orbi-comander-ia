@@ -21,7 +21,7 @@ interface Props {
   compact?: boolean;
 }
 
-const input = 'w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none focus:border-emerald-500';
+const input = 'w-full min-h-11 bg-slate-950 border border-slate-700 rounded-lg px-3 text-sm text-white outline-none focus:border-emerald-500';
 
 export default function OTMaintenanceFields({ ot, onChange, userName, canEditPlanning, compact }: Props) {
   const assets = useMemo(() => loadAssets(), []);
@@ -56,7 +56,7 @@ export default function OTMaintenanceFields({ ot, onChange, userName, canEditPla
 
   return (
     <div className={`bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-3 text-xs ${compact ? '' : 'mt-2'}`}>
-      <div className="text-[10px] font-mono font-bold text-emerald-400 uppercase">Datos de mantenimiento</div>
+      <div className="text-xs font-mono font-bold text-emerald-400 uppercase">Datos de mantenimiento</div>
 
       {/* Activo */}
       <label className="block space-y-1">
@@ -86,7 +86,7 @@ export default function OTMaintenanceFields({ ot, onChange, userName, canEditPla
           <span className="text-slate-400">Codificación de falla (obligatoria para cerrar)</span>
           <div className={`grid gap-2 ${compact ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-3'}`}>
             {([['problema', codes.fallaProblema], ['causa', codes.fallaCausa], ['accion', codes.fallaAccion]] as const).map(([key, list]) => (
-              <select key={key} className={input} value={ot.codigoFalla?.[key] || ''} onChange={e => setFalla(key, e.target.value)}>
+              <select key={key} aria-label={key === 'problema' ? 'Problema de la falla' : key === 'causa' ? 'Causa de la falla' : 'Acción realizada'} className={input} value={ot.codigoFalla?.[key] || ''} onChange={e => setFalla(key, e.target.value)}>
                 <option value="">{key === 'problema' ? 'Problema…' : key === 'causa' ? 'Causa…' : 'Acción…'}</option>
                 {list.map(c => <option key={c.codigo} value={c.codigo}>{c.codigo} — {c.descripcion}</option>)}
               </select>
@@ -102,22 +102,22 @@ export default function OTMaintenanceFields({ ot, onChange, userName, canEditPla
           <span className="font-mono text-white">{totalLaborHours(lines)} HH</span>
         </div>
         {lines.map(l => (
-          <div key={l.id} className="flex justify-between text-[11px] text-slate-300 border-b border-slate-900 py-0.5">
+          <div key={l.id} className="flex justify-between text-xs text-slate-300 border-b border-slate-900 py-0.5">
             <span>{l.tecnico} · {l.fecha} {l.horaInicio}–{l.horaFin}{l.actividad ? ` · ${l.actividad}` : ''}</span>
             <span className="font-mono">{l.horas} h</span>
           </div>
         ))}
         <div className={`grid gap-2 ${compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'}`}>
-          <input type="date" className={input} value={line.fecha} onChange={e => setLine({ ...line, fecha: e.target.value })} />
-          <input type="time" className={input} value={line.horaInicio} onChange={e => setLine({ ...line, horaInicio: e.target.value })} />
-          <input type="time" className={input} value={line.horaFin} onChange={e => setLine({ ...line, horaFin: e.target.value })} />
-          <input className={input} placeholder="Actividad (opcional)" value={line.actividad} onChange={e => setLine({ ...line, actividad: e.target.value })} />
+          <input type="date" aria-label="Fecha de las horas" className={input} value={line.fecha} onChange={e => setLine({ ...line, fecha: e.target.value })} />
+          <input type="time" aria-label="Hora de inicio" className={input} value={line.horaInicio} onChange={e => setLine({ ...line, horaInicio: e.target.value })} />
+          <input type="time" aria-label="Hora de término" className={input} value={line.horaFin} onChange={e => setLine({ ...line, horaFin: e.target.value })} />
+          <input aria-label="Actividad (opcional)" className={input} placeholder="Actividad (opcional)" value={line.actividad} onChange={e => setLine({ ...line, actividad: e.target.value })} />
         </div>
-        {lineError && <div className="text-rose-300 text-[11px]">{lineError}</div>}
-        <button onClick={addLine} className="px-2.5 py-1 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold flex items-center gap-1 hover:bg-emerald-500 hover:text-slate-950">
+        {lineError && <div className="text-rose-300 text-xs">{lineError}</div>}
+        <button onClick={addLine} className="min-h-11 px-3 text-sm rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold flex items-center gap-1 hover:bg-emerald-500 hover:text-slate-950">
           <Plus className="h-3 w-3" /> Registrar mis horas ({hoursBetween(line.horaInicio, line.horaFin)} h)
         </button>
-        <p className="text-[10px] text-slate-500">HH referenciales para gestión de la OT; no constituyen registro de asistencia ni remuneración.</p>
+        <p className="text-xs text-slate-500">HH referenciales para gestión de la OT; no constituyen registro de asistencia ni remuneración.</p>
       </div>
     </div>
   );

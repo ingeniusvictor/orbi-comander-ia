@@ -350,22 +350,12 @@ export default function InsightCenter({
   return (
     <div className="space-y-6">
       
-      {/* SECURITY & SYNC BADGE BANNER */}
-      <div className="bg-indigo-950/20 border border-indigo-900/30 p-4 rounded-xl space-y-2">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-indigo-900/40 pb-2">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4.5 w-4.5 text-indigo-400" />
-            <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
-              ORBI Insight Center
-            </span>
-          </div>
-          <div className="flex items-center gap-2 font-mono text-[10px] bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-indigo-300">
-            <span>Insight Sandbox / Local Sync / Read-Only Analytics</span>
-          </div>
-        </div>
-        <p className="text-[11px] font-mono text-slate-400 leading-relaxed">
-          Sin conexión real a plataformas externas de análisis. Sin APIs reales conectadas, sin credenciales, y sin URLs internas. No se realiza exportación de datos productivos (operando exclusivamente con datos mock/localStorage). Las referencias analíticas son usadas únicamente como benchmark funcional autorizado. ORBI Insight Center es una herramienta propia y exclusiva integrada en el ecosistema ORBI.
-        </p>
+      {/* 17A UX P0: aviso breve y veraz (antes: jerga "Sandbox / mock / localStorage") */}
+      <div role="note" className="bg-amber-500/10 border border-amber-500/30 px-4 py-3 rounded-xl text-sm text-amber-100 flex items-start gap-2.5">
+        <ShieldCheck className="h-5 w-5 text-amber-300 shrink-0 mt-0.5" />
+        <span>
+          <strong className="font-semibold">Indicadores de referencia.</strong> Combinan las OTs del piloto con datos de ejemplo de otras plantas; no son cifras oficiales de la operación.
+        </span>
       </div>
 
       {/* HEADER SECTION - PREMIUM COMMAND CENTER STYLE */}
@@ -374,9 +364,6 @@ export default function InsightCenter({
           <div className="flex flex-wrap items-center gap-2">
             <span className="bg-indigo-500/10 text-indigo-400 text-[10px] font-mono px-2 py-0.5 rounded border border-indigo-500/20 font-bold uppercase tracking-wider">
               ORBI Insight Center
-            </span>
-            <span className="text-xs font-mono text-slate-500">
-              Versión: v0.2.x-QA — Executive Analytics Shell
             </span>
           </div>
           <h2 className="text-xl font-bold text-white mt-1.5 flex items-center gap-2 tracking-tight">
@@ -517,7 +504,7 @@ export default function InsightCenter({
             {/* BENCHMARK REFERENCE FOOTNOTE */}
             <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
               <span className="h-2 w-2 bg-indigo-500 rounded-full"></span>
-              <span>Insight Reference 00 — Landing / Dashboard Control Operacional</span>
+              <span>Landing / Dashboard Control Operacional</span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -597,7 +584,7 @@ export default function InsightCenter({
                     {desviacionHH > 0 ? `+${desviacionHH}` : desviacionHH} Hrs
                   </div>
                   <div className="text-[10px] text-slate-400 font-mono mt-2 leading-none">
-                    Real: {hhReales} vs Est: {hhEstimadas} Hrs
+                    Registradas: {hhReales} · Estimadas: {hhEstimadas} HH
                   </div>
                 </div>
 
@@ -646,7 +633,7 @@ export default function InsightCenter({
                 <div>
                   <span className="text-xs font-mono text-slate-400 uppercase tracking-wider font-bold block border-b border-slate-900 pb-1.5">Workspace Vinculado</span>
                   <p className="text-[11px] text-slate-400 leading-normal mt-2">
-                    La base analítica detecta **{biRecords.filter(o => !o.fechaProgramada).length}** órdenes de trabajo sin programar en Inbox.
+                    La base analítica detecta <strong className="text-white">{biRecords.filter(o => !o.fechaProgramada).length}</strong> órdenes de trabajo sin programar.
                   </p>
                 </div>
                 <button 
@@ -694,21 +681,21 @@ export default function InsightCenter({
             {/* BENCHMARK REFERENCES BADGES FOR ACTIVE ZONE */}
             <div className="flex flex-wrap gap-2">
               <span className="bg-slate-950 text-slate-400 font-mono text-[9px] px-2.5 py-1 rounded border border-slate-900">
-                Insight Reference 02 — O&M General Operational Summary
+                O&M General Operational Summary
               </span>
               {selectedZone === 'Norte' && (
                 <span className="bg-indigo-950/40 text-indigo-400 font-mono text-[9px] px-2.5 py-1 rounded border border-indigo-900/30">
-                  Insight Reference 03 — Zona Norte Operational Summary
+                  Zona Norte Operational Summary
                 </span>
               )}
               {selectedZone === 'Centro' && (
                 <span className="bg-amber-950/40 text-amber-400 font-mono text-[9px] px-2.5 py-1 rounded border border-amber-900/30 animate-pulse">
-                  Insight Reference 04 — Zona Centro / Bluetree MP Operational Summary
+                  Zona Centro / Bluetree MP Operational Summary
                 </span>
               )}
               {selectedZone === 'Sur' && (
                 <span className="bg-rose-950/40 text-rose-400 font-mono text-[9px] px-2.5 py-1 rounded border border-rose-900/30 animate-pulse font-black">
-                  Insight Reference 05 — Zona Sur Operational Summary
+                  Zona Sur Operational Summary
                 </span>
               )}
             </div>
@@ -873,7 +860,7 @@ export default function InsightCenter({
             
             <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
               <span className="h-2 w-2 bg-indigo-500 rounded-full"></span>
-              <span>Insight Reference 02 — O&M General Operational Summary (SLA KPIs)</span>
+              <span>O&M General Operational Summary (SLA KPIs)</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -983,7 +970,7 @@ export default function InsightCenter({
             {/* REFERENCE ACCREDITATION */}
             <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
               <span className="h-2 w-2 bg-indigo-500 rounded-full"></span>
-              <span>Insight Reference 16 — Reporte HH / Technician vs Plant Matrix</span>
+              <span>Reporte HH / Technician vs Plant Matrix</span>
             </div>
 
             {/* RELIABILITY WARNING BANNER */}
@@ -1278,7 +1265,7 @@ export default function InsightCenter({
                   <div className="space-y-6">
                     <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
                       <span className="h-2 w-2 bg-emerald-500 rounded-full"></span>
-                      <span>Insight Reference 06 — ICAFAL Client Activity Dashboard</span>
+                      <span>ICAFAL Client Activity Dashboard</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1317,7 +1304,7 @@ export default function InsightCenter({
                   <div className="space-y-6">
                     <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
                       <span className="h-2 w-2 bg-amber-500 rounded-full"></span>
-                      <span>Insight Reference 07 — BIWO Client Activity Dashboard</span>
+                      <span>BIWO Client Activity Dashboard</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1360,7 +1347,7 @@ export default function InsightCenter({
                   <div className="space-y-6">
                     <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
                       <span className="h-2 w-2 bg-orange-500 rounded-full animate-pulse"></span>
-                      <span>Insight Reference 13 — CVE Client Activity Dashboard</span>
+                      <span>CVE Client Activity Dashboard</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1417,7 +1404,7 @@ export default function InsightCenter({
                   <div className="space-y-6">
                     <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
                       <span className="h-2 w-2 bg-indigo-500 rounded-full"></span>
-                      <span>Insight Reference 14 — AGR Client Scheduled / Accumulated Dashboard</span>
+                      <span>AGR Client Scheduled / Accumulated Dashboard</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1485,7 +1472,7 @@ export default function InsightCenter({
                   <div className="space-y-6">
                     <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
                       <span className="h-2 w-2 bg-slate-700 rounded-full"></span>
-                      <span>Insight Reference 15 — ECOM Empty / Inactive Client Dashboard</span>
+                      <span>ECOM Empty / Inactive Client Dashboard</span>
                     </div>
 
                     <div className="bg-slate-950 p-12 rounded-2xl border border-slate-900 text-center max-w-xl mx-auto space-y-4">
@@ -1515,7 +1502,7 @@ export default function InsightCenter({
             
             <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider border-b border-slate-900 pb-1.5 flex items-center gap-2">
               <span className="h-2 w-2 bg-indigo-500 rounded-full"></span>
-              <span>Insight Reference 17 — HH Distribution by Work Order Type</span>
+              <span>HH Distribution by Work Order Type</span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

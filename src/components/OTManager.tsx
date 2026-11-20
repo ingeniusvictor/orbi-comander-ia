@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import { transitionOT, nextEstados, softwrenchCodeOf } from '../domain/otStateMachine';
 import {
   FileText,
@@ -551,7 +552,7 @@ export default function OTManager({
   // Perform multi-module integrations on Wizard save
   const handleSaveWizard = (targetState: OTEstado) => {
     if (!wizardOt.activo || !wizardOt.observaciones) {
-      alert('Por favor complete el Activo y las Observaciones antes de guardar.');
+      notify('Por favor complete el Activo y las Observaciones antes de guardar.');
       return;
     }
 
@@ -891,7 +892,7 @@ export default function OTManager({
         comentario: `Validación ${stage} por ${activeUserName}${tempComentarioRevisor ? ': ' + tempComentarioRevisor : ''}`
       }, patch);
       if (result.ok === false) {
-        alert(result.error);
+        notify(result.error);
         return;
       }
       finalOt = result.ot;
@@ -929,13 +930,13 @@ export default function OTManager({
       );
     }
 
-    alert(`¡Etapa ${stage} aprobada y firmada con éxito!`);
+    notify(`¡Etapa ${stage} aprobada y firmada con éxito!`);
   };
 
   const handleDevolveToField = () => {
     if (!editingOt) return;
     if (!tempComentarioDevolucion.trim() || !tempDetallesFaltantes.trim()) {
-      alert('Debe especificar un comentario de devolución y los detalles faltantes/pendientes.');
+      notify('Debe especificar un comentario de devolución y los detalles faltantes/pendientes.');
       return;
     }
 
@@ -949,7 +950,7 @@ export default function OTManager({
       detallesFaltantes: tempDetallesFaltantes
     });
     if (devResult.ok === false) {
-      alert(devResult.error);
+      notify(devResult.error);
       return;
     }
     const updated: OT = devResult.ot;
@@ -977,7 +978,7 @@ export default function OTManager({
       'Alta'
     );
 
-    alert('La orden de trabajo ha sido devuelta a terreno con éxito.');
+    notify('La orden de trabajo ha sido devuelta a terreno con éxito.');
   };
 
   // Markdown summary generation
@@ -1071,7 +1072,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
 
   const handleCopyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('¡Resumen Markdown copiado al portapapeles con éxito!');
+    notify('¡Resumen Markdown copiado al portapapeles con éxito!');
   };
 
   // Filter lists
@@ -1115,7 +1116,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
               className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all hover:scale-102"
               id="btn-create-ot"
             >
-              <PlusCircle className="h-4 w-4" /> Nuevo Despacho Wizard
+              <PlusCircle className="h-4 w-4" /> Nueva OT
             </button>
           )}
         </div>
@@ -1174,7 +1175,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                 : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
             }`}
           >
-            📁 ORBI SharePoint Router Mock
+            📁 Archivo SharePoint (simulado)
           </button>
         )}
         <button
@@ -1982,7 +1983,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                     {editingOt.codigo}
                   </span>
                   <span className="text-[10px] font-mono text-slate-500">
-                    Ficha de OT Profesional
+                    Ficha de OT
                   </span>
                 </div>
                 <h3 className="text-base font-black text-white mt-1">

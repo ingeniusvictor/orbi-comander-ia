@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { notify } from './Toaster';
 import { 
   Boxes, 
   Search, 
@@ -227,9 +228,9 @@ export default function OMInventory({
     if (updated) {
       updateInventoryState(currentInventory);
       updateMovementsState(currentMovements);
-      alert('Sincronización con OTs finalizada. Se detectaron y procesaron nuevos consumos de repuestos.');
+      notify('Sincronización con OTs finalizada. Se detectaron y procesaron nuevos consumos de repuestos.');
     } else {
-      alert('Inventario al día. No se encontraron nuevos consumos pendientes de registrar.');
+      notify('Inventario al día. No se encontraron nuevos consumos pendientes de registrar.');
     }
   };
 
@@ -317,7 +318,7 @@ export default function OMInventory({
   const handleCreateNewItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.codigo || !newItem.descripcion || !newItem.plantaId) {
-      alert('Por favor complete los campos obligatorios.');
+      notify('Por favor complete los campos obligatorios.');
       return;
     }
 
@@ -347,7 +348,7 @@ export default function OMInventory({
 
     // Check if code already exists
     if (inventory.some(item => item.codigo === createdItem.codigo)) {
-      alert(`El código de ítem "${createdItem.codigo}" ya existe en el inventario.`);
+      notify(`El código de ítem "${createdItem.codigo}" ya existe en el inventario.`);
       return;
     }
 
@@ -384,7 +385,7 @@ export default function OMInventory({
   const handleRegisterManualMovement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMovement.itemCodigo || newMovement.cantidad <= 0) {
-      alert('Seleccione un repuesto y defina una cantidad mayor a cero.');
+      notify('Seleccione un repuesto y defina una cantidad mayor a cero.');
       return;
     }
 
@@ -397,7 +398,7 @@ export default function OMInventory({
 
     if (newMovement.tipoMovimiento === 'Consumo por OT' || newMovement.tipoMovimiento === 'Baja por daño') {
       if (stockAnterior < newMovement.cantidad) {
-        alert(`No hay stock suficiente. Stock disponible: ${stockAnterior} ${item.unidad}.`);
+        notify(`No hay stock suficiente. Stock disponible: ${stockAnterior} ${item.unidad}.`);
         valid = false;
       } else {
         stockFinal = stockAnterior - newMovement.cantidad;
@@ -406,10 +407,10 @@ export default function OMInventory({
       stockFinal = stockAnterior + newMovement.cantidad;
     } else if (newMovement.tipoMovimiento === 'Traslado entre plantas') {
       if (!newMovement.plantaDestinoId) {
-        alert('Debe seleccionar la planta de destino para el traslado.');
+        notify('Debe seleccionar la planta de destino para el traslado.');
         valid = false;
       } else if (stockAnterior < newMovement.cantidad) {
-        alert(`No hay stock suficiente para trasladar. Stock disponible: ${stockAnterior} ${item.itemCodigo || item.unidad}.`);
+        notify(`No hay stock suficiente para trasladar. Stock disponible: ${stockAnterior} ${item.itemCodigo || item.unidad}.`);
         valid = false;
       } else {
         stockFinal = stockAnterior - newMovement.cantidad;

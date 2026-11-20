@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { notify } from './Toaster';
 import {
   Users,
   Search,
@@ -165,7 +166,7 @@ export default function PeopleResource({
       persona.cargaSemanal > 100 ? 'Crítica' : 'Alta'
     );
     
-    alert(`Se ha escalado con éxito la sobrecarga laboral de ${persona.nombre} al Risk & Escalation Center.`);
+    notify(`Se ha escalado con éxito la sobrecarga laboral de ${persona.nombre} al Risk & Escalation Center.`);
   };
 
   return (

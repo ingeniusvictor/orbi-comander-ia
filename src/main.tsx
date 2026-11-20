@@ -2,12 +2,17 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import ErrorBoundary from './components/ErrorBoundary';
+import Toaster from './components/Toaster';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/space-grotesk';
+import '@fontsource-variable/jetbrains-mono';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary modulo="ORBI">
       <App />
+      <Toaster />
     </ErrorBoundary>
   </StrictMode>,
 );

@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { notify } from './Toaster';
 import { 
   FileText, 
   Printer, 
@@ -152,7 +153,7 @@ MÉTRICAS PRINCIPALES:
 =========================================
 `;
     navigator.clipboard.writeText(summaryText);
-    alert('Resumen del reporte copiado al portapapeles con éxito.');
+    notify('Resumen del reporte copiado al portapapeles con éxito.');
   };
 
   return (

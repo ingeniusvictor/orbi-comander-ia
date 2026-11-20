@@ -93,7 +93,7 @@ export default function ExecutiveDemoHub({
         <ShieldAlert className="h-12 w-12 text-rose-500 mx-auto animate-bounce" />
         <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">⚠️ Acceso Restringido</h3>
         <p className="text-xs text-slate-400 leading-relaxed">
-          El módulo **ORBI Executive Demo Hub** está reservado para roles de jefatura, supervisión, coordinación y administración O&M.
+          El módulo <strong className="text-white">ORBI Executive Demo Hub</strong> está reservado para roles de jefatura, supervisión, coordinación y administración O&M.
         </p>
         <button
           onClick={() => onNavigate('Home')}
@@ -491,7 +491,7 @@ La actual demo opera en modo sandbox/read-only con persistencia local simulada e
             <Award className="h-6 w-6 text-emerald-400" /> ORBI Executive Demo Hub
           </h2>
           <p className="text-xs text-slate-400 max-w-4xl leading-normal">
-            Centro de presentación, release y recorrido ejecutivo del ecosistema **ORBI O&M Command Center IA**. Use esta consola integrada para planificar y conducir demostraciones fluidas de alto impacto para gerentes, directores y clientes de O&M.
+            Centro de presentación, release y recorrido ejecutivo del ecosistema <strong className="text-white">ORBI O&M Command Center IA</strong>. Use esta consola integrada para planificar y conducir demostraciones fluidas de alto impacto para gerentes, directores y clientes de O&M.
           </p>
         </div>
 
