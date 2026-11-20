@@ -149,7 +149,7 @@ export default function EscalationCenter({
     // Registrar en auditoría
     onAddAuditLog(
       'Escalamiento creado',
-      'Risk & Escalation Center',
+      'Riesgos y Escalamientos',
       item.otVinculada,
       item.plantaVinculada,
       `Escalamiento de riesgo generado: ${item.tipo}. Escalado a: ${item.escaladoA}. Comentario: ${item.comentario}`,
@@ -206,7 +206,7 @@ export default function EscalationCenter({
 
     onAddAuditLog(
       'Cambio estado de escalamiento',
-      'Risk & Escalation Center',
+      'Riesgos y Escalamientos',
       escItem.otVinculada,
       escItem.plantaVinculada,
       `Escalamiento ${escId} modificado a estado: ${newStatus} por ${activeUserName}.`,
@@ -234,7 +234,7 @@ export default function EscalationCenter({
 
     onAddAuditLog(
       'Comentario de Escalamiento',
-      'Risk & Escalation Center',
+      'Riesgos y Escalamientos',
       selectedEscalation.otVinculada,
       selectedEscalation.plantaVinculada,
       `Nuevo comentario en Escalamiento ${selectedEscalation.id}: ${commentInput}`,
@@ -279,7 +279,7 @@ export default function EscalationCenter({
       <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <AlertTriangle className="h-5.5 w-5.5 text-rose-400" /> Risk & Escalation Center
+            <AlertTriangle className="h-5.5 w-5.5 text-rose-400" /> Riesgos y Escalamientos
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Gestión centralizada de desviaciones críticas, bloqueos de ejecución, sobrecargas de personal y riesgos operativos O&M.

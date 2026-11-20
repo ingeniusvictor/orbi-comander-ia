@@ -7,7 +7,7 @@
  * - Archivos de la app (/assets/*, con nombre versionado): se guardan al descargarlos y se
  *   eliminan los que ya no usa la versión vigente.
  */
-const CACHE = 'orbi-shell-v2';
+const CACHE = 'orbi-shell-v3';
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
 const NAV_TIMEOUT_MS = 4000;
 
@@ -23,14 +23,38 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-/** Guarda la página nueva y borra los archivos /assets/ que ya no referencia. */
+const ASSET_RE = /assets\/[\w.-]+\.(?:js|css|woff2?|svg|png)/g;
+
+/**
+ * Archivos /assets/ que usa la versión vigente: los que nombra la página y, en cadena, los que
+ * nombran sus scripts (17A UX P2: los módulos se cargan bajo demanda y no aparecen en la página).
+ */
+async function referencedAssets(html, cache) {
+  const found = new Set((html.match(ASSET_RE) || []).map((a) => '/' + a));
+  const leible = (a) => a.endsWith('.js') || a.endsWith('.css');
+  const queue = [...found].filter(leible);
+  while (queue.length) {
+    const path = queue.shift();
+    let res = await cache.match(path);
+    if (!res) res = await fetch(path).catch(() => null);
+    if (!res || !res.ok) continue;
+    for (const a of (await res.text()).match(ASSET_RE) || []) {
+      const ref = '/' + a;
+      if (!found.has(ref)) { found.add(ref); if (leible(ref)) queue.push(ref); }
+    }
+  }
+  return found;
+}
+
+/** Guarda la página nueva y borra los archivos /assets/ que la versión vigente ya no usa. */
 async function storeShell(res) {
   const html = await res.clone().text();
   const cache = await caches.open(CACHE);
   await cache.put('/', res);
+  const vigentes = await referencedAssets(html, cache);
   for (const req of await cache.keys()) {
     const path = new URL(req.url).pathname;
-    if (path.startsWith('/assets/') && !html.includes(path)) await cache.delete(req);
+    if (path.startsWith('/assets/') && !vigentes.has(path)) await cache.delete(req);
   }
 }
 

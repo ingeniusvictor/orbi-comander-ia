@@ -9,8 +9,9 @@ import { Clock, Plus } from 'lucide-react';
 import type { OT } from '../types';
 import { localIsoDate, assetPath, hoursBetween, totalLaborHours, validateLaborLine, requiresFailureCode, type LaborLine } from '../domain/cmms';
 import { softwrenchCodeOf } from '../domain/otStateMachine';
-import { loadAssets, loadCodes } from './CmmsMaestros';
+import { loadAssets, loadCodes } from '../data/cmmsStore';
 
+import Button from './ui/Button';
 interface Props {
   ot: OT;
   /** Aplica cambios a la OT (sin cambiar su estado). */
@@ -56,7 +57,7 @@ export default function OTMaintenanceFields({ ot, onChange, userName, canEditPla
 
   return (
     <div className={`bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-3 text-xs ${compact ? '' : 'mt-2'}`}>
-      <div className="text-xs font-mono font-bold text-emerald-400 uppercase">Datos de mantenimiento</div>
+      <div className="text-sm font-semibold text-accent">Datos de mantenimiento</div>
 
       {/* Activo */}
       <label className="block space-y-1">
@@ -113,10 +114,10 @@ export default function OTMaintenanceFields({ ot, onChange, userName, canEditPla
           <input type="time" aria-label="Hora de término" className={input} value={line.horaFin} onChange={e => setLine({ ...line, horaFin: e.target.value })} />
           <input aria-label="Actividad (opcional)" className={input} placeholder="Actividad (opcional)" value={line.actividad} onChange={e => setLine({ ...line, actividad: e.target.value })} />
         </div>
-        {lineError && <div className="text-rose-300 text-xs">{lineError}</div>}
-        <button onClick={addLine} className="min-h-11 px-3 text-sm rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold flex items-center gap-1 hover:bg-emerald-500 hover:text-slate-950">
-          <Plus className="h-3 w-3" /> Registrar mis horas ({hoursBetween(line.horaInicio, line.horaFin)} h)
-        </button>
+        {lineError && <div role="alert" className="text-danger text-xs">{lineError}</div>}
+        <Button variant="primary" onClick={addLine} icon={<Plus />}>
+          Registrar mis horas ({hoursBetween(line.horaInicio, line.horaFin)} h)
+        </Button>
         <p className="text-xs text-slate-500">HH referenciales para gestión de la OT; no constituyen registro de asistencia ni remuneración.</p>
       </div>
     </div>

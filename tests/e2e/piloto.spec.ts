@@ -73,7 +73,7 @@ test('1. el técnico inicia sesión y ve solo sus OTs', async () => {
 
 test('2. abre la OT preventiva generada por el plan y confirma su llegada', async () => {
   await tecnico.getByText(OT_PM).click();
-  await tecnico.getByRole('button', { name: 'Confirmar Arribo' }).click();
+  await tecnico.getByRole('button', { name: 'Confirmar llegada' }).click();
   await expect.poll(async () => (await apiOT(tecnico, OT_PM))?.estado, { timeout: 10_000 }).toBe('En terreno');
 });
 
@@ -86,7 +86,7 @@ test('3. responde el checklist: valor fuera de rango y foto por pregunta', async
   await foto.setInputFiles({ name: 'modulos.jpg', mimeType: 'image/jpeg', buffer: await makeJpeg(tecnico, '#2a6') });
   await expect(tecnico.getByText('Foto agregada a la pregunta.')).toBeVisible();
 
-  await tecnico.getByRole('button', { name: 'Guardar Checklist' }).click();
+  await tecnico.getByRole('button', { name: 'Guardar checklist' }).click();
   await expect.poll(async () => {
     const ot = await apiOT(tecnico, OT_PM);
     const irr = ot?.checklistExecution?.find((c: any) => c.unidad === 'W/m²');
@@ -172,4 +172,22 @@ test('7. terreno legible: botones de 44 px, sin letra menor a 12 px y modo sol q
   await expect(tecnico.locator('#vista-terreno-container')).toHaveClass(/tema-sol/);
   await tecnico.getByRole('button', { name: 'Modo oscuro' }).first().click();
   await expect(tecnico.locator('#vista-terreno-container')).not.toHaveClass(/tema-sol/);
+});
+
+test('8. sin señal desde el inicio: la app y Vista Terreno (cargada aparte) abren desde el teléfono', async () => {
+  // El service worker debe controlar la página y haber guardado el módulo de terreno
+  await tecnico.evaluate(() => navigator.serviceWorker.ready);
+  await tecnico.reload();
+  await expect.poll(() => tecnico.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 10_000 }).toBe(true);
+  await expect(tecnico.getByText('Mis OT Asignadas')).toBeVisible();
+  // Una segunda recarga con señal dispara la limpieza de archivos viejos: no debe borrar el módulo de terreno
+  await tecnico.reload();
+  await expect(tecnico.getByText('Mis OT Asignadas')).toBeVisible();
+  await tecnico.waitForTimeout(1500);
+
+  await tecnicoCtx.setOffline(true);
+  await tecnico.reload();
+  await expect(tecnico.getByText('Mis OT Asignadas')).toBeVisible({ timeout: 15_000 });
+  await expect(tecnico.getByText(OT_PM)).toBeVisible();
+  await tecnicoCtx.setOffline(false);
 });

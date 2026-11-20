@@ -42,6 +42,7 @@ import {
   CheckSquare,
   CheckCircle2
 } from 'lucide-react';
+import Button, { buttonClass } from './ui/Button';
 import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, Escalation, Repuesto, Herramienta, OMInventoryItem, OMInventoryMovement } from '../types';
 import { transitionOT } from '../domain/otStateMachine';
 import { uploadPhoto } from '../data/serverSync';
@@ -388,7 +389,7 @@ export default function VistaTerreno({
     // Reiniciar paso de ejecución a uno válido
     setExecutionStep(1);
 
-    triggerSuccess(`🧪 Modo de Prueba: Se configuró la OT como "${typeKey.toUpperCase().replace('_', ' ')}"`);
+    triggerSuccess(`Prueba: la OT quedó configurada como "${typeKey.toUpperCase().replace('_', ' ')}"`);
   };
 
   // Determinar si el rol tiene capacidades de supervisor
@@ -566,7 +567,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Confirmación de Llegada',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Técnico confirma arribo simulado a las ${tempHoraLlegada}. Obs: ${tempObsLlegada}`,
@@ -615,7 +616,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Firma AST & Inicio Ejecución',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `AST firmado por ${tempFirmaEjecutor}. Riesgos: ${tempRiesgos.join(', ') || 'Ninguno detectado'}. Estado cambió a "En ejecución".`,
@@ -713,7 +714,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Checklist Actualizado',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Progreso del checklist: ${completedItems}/${totalItems} completados (${progressPercent}% de avance).`,
@@ -779,7 +780,7 @@ export default function VistaTerreno({
       logFieldExecution(selectedOt.codigo, 'Evidence', `Evidencia de tipo ${newEvidenceType} agregada: ${newEvidenceLabel}`);
       onAddAuditLog(
         'Evidencia Fotográfica Terreno',
-        'Field Ops Mobile',
+        'Terreno (móvil)',
         selectedOt.codigo,
         selectedOt.plantaNombre,
         `Se adjuntó foto de tipo "${newEvidenceType}": ${newEvidence.label}`,
@@ -1021,7 +1022,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'HH & Diagnóstico Terreno',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `HH registradas: ${tempHhReales}. Diagnóstico: ${tempDiagnosticoFinal}.`,
@@ -1099,7 +1100,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Propuesta de Cierre',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Técnico solicita revisión final y cierre de la OT. Comentario: ${comentarioCierre || 'N/A'}. Estado: Lista para revisión.`,
@@ -1156,7 +1157,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Bloqueo de Terreno Registrado',
-      'Field Ops Mobile',
+      'Terreno (móvil)',
       selectedOt.codigo,
       selectedOt.plantaNombre,
       `Trabajos detenidos por: ${blockerType}. Justificación: ${blockerComment}. OT marcada como Bloqueada.`,
@@ -1166,7 +1167,7 @@ export default function VistaTerreno({
     setShowBlockerModal(false);
     setBlockerComment('');
     setSelectedOt(null);
-    triggerSuccess('¡Bloqueo operativo registrado y escalado al Risk & Escalation Center!');
+    triggerSuccess('¡Bloqueo operativo registrado y escalado al Riesgos y Escalamientos!');
   };
 
   // 8. ACCIONES DE SUPERVISOR DE TERRENO
@@ -1195,7 +1196,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Evidencia Validada',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor valida y aprueba ítem fotográfico de evidencia ${evidenceId}.`,
@@ -1237,7 +1238,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'OT Devuelta a Ejecución',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor devuelve OT a terreno. Comentario: ${comments || 'N/A'}.`,
@@ -1288,7 +1289,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Cierre Técnico Aprobado',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor aprueba el cierre técnico formal de la OT ${otCode}.`,
@@ -1332,7 +1333,7 @@ export default function VistaTerreno({
 
     onAddAuditLog(
       'Escalamiento Jerárquico',
-      'Field Ops Supervisor',
+      'Terreno (supervisión)',
       otCode,
       ot.plantaNombre,
       `Supervisor escala formalmente el control de la OT al Coordinador O&M. Motivo: ${motive || 'N/A'}`,
@@ -1387,13 +1388,13 @@ export default function VistaTerreno({
         </div>
         <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-xs flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 font-mono">Usuario:</span>
+            <span className="text-slate-500">Usuario:</span>
             <span className="text-white font-bold">{activeUserName}</span>
           </div>
           <span className="text-slate-700">|</span>
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 font-mono">Rol:</span>
-            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono px-2 py-0.5 rounded text-xs">
+            <span className="text-slate-500">Rol:</span>
+            <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2 py-0.5 rounded text-xs">
               {userRole}
             </span>
           </div>
@@ -1421,7 +1422,7 @@ export default function VistaTerreno({
             <div className="flex-1 bg-slate-950 text-white flex flex-col pt-0 sm:pt-6 select-none">
               
               {/* Status Bar */}
-              <div className="px-4 py-2 hidden sm:flex justify-between items-center text-xs font-mono text-slate-500 border-b border-slate-900 bg-slate-900/60 shrink-0">
+              <div className="px-4 py-2 hidden sm:flex justify-between items-center text-xs text-slate-500 border-b border-slate-900 bg-slate-900/60 shrink-0">
                 <div className="flex items-center gap-1">
                   <Clock className="h-3 w-3 text-slate-400" />
                   <span>{new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1444,23 +1445,23 @@ export default function VistaTerreno({
                 <div className="grid grid-cols-2 bg-slate-900/40 border-b border-slate-900 shrink-0">
                   <button
                     onClick={() => { setActiveTab('ejecucion'); setSelectedOt(null); }}
-                    className={`py-2 text-xs font-mono font-bold tracking-wider uppercase border-b-2 transition-colors ${
+                    className={`min-h-11 text-sm font-semibold border-b-2 transition-colors ${
                       activeTab === 'ejecucion'
                         ? 'border-emerald-500 text-emerald-400 bg-slate-900/20'
                         : 'border-transparent text-slate-500 hover:text-slate-300'
                     }`}
                   >
-                    ⚙️ Mi Ejecución
+                    Mi ejecución
                   </button>
                   <button
                     onClick={() => { setActiveTab('supervisor'); setSelectedOt(null); }}
-                    className={`py-2 text-xs font-mono font-bold tracking-wider uppercase border-b-2 transition-colors ${
+                    className={`min-h-11 text-sm font-semibold border-b-2 transition-colors ${
                       activeTab === 'supervisor'
-                        ? 'border-cyan-500 text-cyan-400 bg-slate-900/20'
+                        ? 'border-emerald-500 text-emerald-400 bg-slate-900/20'
                         : 'border-transparent text-slate-500 hover:text-slate-300'
                     }`}
                   >
-                    🛡️ Panel Supervisor
+                    Supervisión
                   </button>
                 </div>
               )}
@@ -1470,7 +1471,7 @@ export default function VistaTerreno({
                 
                 {/* Alerta de Éxito Flotante */}
                 {successMessage && (
-                  <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 p-2.5 rounded-lg mb-3 text-sm font-mono flex items-start gap-1.5 animate-fade-in shrink-0">
+                  <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 p-2.5 rounded-lg mb-3 text-sm flex items-start gap-1.5 animate-fade-in shrink-0">
                     <CheckCircle className="h-4 w-4 shrink-0 mt-0.5 text-emerald-400" />
                     <span>{successMessage}</span>
                   </div>
@@ -1484,7 +1485,7 @@ export default function VistaTerreno({
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <div>
-                            <h3 className="text-xs font-mono text-slate-500 uppercase">Bandeja de Terreno</h3>
+                            <h3 className="text-xs text-slate-500">Bandeja de Terreno</h3>
                             <h2 className="text-sm font-bold text-white">Mis OT Asignadas</h2>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1523,7 +1524,7 @@ export default function VistaTerreno({
                               key={f.id}
                               type="button"
                               onClick={() => setQuickFilter(f.id)}
-                              className={`px-2 py-0.5 rounded-full text-xs font-mono whitespace-nowrap border transition-colors ${
+                              className={`px-2 py-0.5 rounded-full text-xs whitespace-nowrap border transition-colors ${
                                 quickFilter === f.id
                                   ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-bold'
                                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
@@ -1559,7 +1560,7 @@ export default function VistaTerreno({
                               >
                                 <div className="flex justify-between items-start gap-1">
                                   <span className="text-xs font-mono text-slate-500 font-bold">{ot.codigo}</span>
-                                  <span className={`text-xs font-mono px-1.5 py-0.2 rounded font-bold uppercase ${
+                                  <span className={`text-xs px-1.5 py-0.2 rounded font-bold ${
                                     ot.prioridad === 'Crítica' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
                                     ot.prioridad === 'Alta' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
                                     'bg-slate-800 text-slate-400'
@@ -1572,7 +1573,7 @@ export default function VistaTerreno({
                                 <p className="text-xs text-slate-400 truncate">{ot.plantaNombre} ({zona})</p>
 
                                 {ot.estado === 'Devuelta a ejecución' && (
-                                  <div className="mt-2 bg-rose-500/10 border border-rose-500/25 rounded-lg p-2 text-xs text-rose-300 font-mono">
+                                  <div className="mt-2 bg-rose-500/10 border border-rose-500/25 rounded-lg p-2 text-xs text-rose-300">
                                     <div className="font-bold flex items-center gap-1 text-rose-400">
                                       <span>↩️ DEVUELTA A EJECUCIÓN</span>
                                     </div>
@@ -1589,7 +1590,7 @@ export default function VistaTerreno({
                                 )}
 
                                 {/* Grid de Atributos */}
-                                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs font-mono text-slate-400 border-t border-slate-950 pt-2">
+                                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-xs text-slate-400 border-t border-slate-950 pt-2">
                                   <div>
                                     <span className="text-slate-500">Tipo:</span> <span className="text-slate-300 font-semibold">{ot.tipo}</span>
                                   </div>
@@ -1611,7 +1612,7 @@ export default function VistaTerreno({
                                 </div>
 
                                 {/* Status de ejecución */}
-                                <div className="mt-2 flex flex-wrap gap-1 items-center pt-2 border-t border-slate-950 text-xs font-mono">
+                                <div className="mt-2 flex flex-wrap gap-1 items-center pt-2 border-t border-slate-950 text-xs">
                                   <span className={`px-1 rounded ${ot.astFirmado ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
                                     AST: {astStatus}
                                   </span>
@@ -1630,7 +1631,7 @@ export default function VistaTerreno({
                           })}
 
                           {filteredMyOts.length === 0 && (
-                            <div className="text-center py-10 text-sm text-slate-600 font-mono border border-dashed border-slate-900 rounded-xl">
+                            <div className="text-center py-10 text-sm text-slate-600 border border-dashed border-slate-900 rounded-xl">
                               No se encontraron tareas asignadas activas en terreno.
                             </div>
                           )}
@@ -1647,7 +1648,7 @@ export default function VistaTerreno({
                             <ArrowLeft className="h-4 w-4" /> Bandeja
                           </button>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-mono text-emerald-400 font-bold">Paso {executionStep}/6</span>
+                            <span className="text-sm text-emerald-400 font-bold">Paso {executionStep}/6</span>
                             <BotonModoSol />
                           </div>
                         </div>
@@ -1656,7 +1657,7 @@ export default function VistaTerreno({
                         <div className="bg-slate-900/40 p-2.5 rounded-xl border border-slate-850 space-y-1">
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-mono text-slate-500">{selectedOt.codigo}</span>
-                            <span className="text-xs font-mono text-slate-400 bg-slate-800 px-1.5 rounded">{selectedOt.tipo}</span>
+                            <span className="text-xs text-slate-400 bg-slate-800 px-1.5 rounded">{selectedOt.tipo}</span>
                           </div>
                           <h3 className="text-xs font-bold text-white truncate">{selectedOt.activo}</h3>
                           <p className="text-xs text-slate-400">{selectedOt.plantaNombre}</p>
@@ -1665,9 +1666,9 @@ export default function VistaTerreno({
                         {/* SELECTOR MOCK DE TIPO DE OT (MODO PRUEBA - REGLA 8). 17A: solo Super Admin; cambia datos reales de la OT */}
                         {userRole === 'SUPER_ADMIN_ORBI' && (
                         <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl space-y-1.5">
-                          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
-                            <span className="animate-pulse">🧪</span>
-                            <span>SELECTOR MOCK DE COMPORTAMIENTO (REGLA 8)</span>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                            <Wrench className="h-4 w-4" aria-hidden="true" />
+                            <span>Herramienta de pruebas (solo Super Admin)</span>
                           </div>
                           <select
                             value={mockOtType}
@@ -1676,22 +1677,22 @@ export default function VistaTerreno({
                               setMockOtType(val);
                               handleApplyMockType(val);
                             }}
-                            className="w-full bg-slate-950 border border-amber-500/20 text-xs font-mono text-amber-300 rounded px-2 py-1 outline-none focus:border-amber-500 cursor-pointer"
+                            className="w-full bg-slate-950 border border-amber-500/20 text-xs text-amber-300 rounded px-2 py-1 outline-none focus:border-amber-500 cursor-pointer"
                           >
                             <option value="">-- Cambiar tipo para pruebas --</option>
-                            <option value="simple">🟢 OT Simple (Sin AST/Checklist/Evidencia)</option>
-                            <option value="preventivo">🔵 OT Preventivo Normal (Checklist + Evidencia)</option>
-                            <option value="correctivo_repuesto">🔧 OT Correctivo con Repuestos (Insumos + Diagnóstico)</option>
-                            <option value="critica_ast">⚠️ OT Crítica con AST (Firma requerida)</option>
-                            <option value="loto_hse">🛡️ OT con LOTO / HSE (Permisos + Firmas + Validaciones)</option>
+                            <option value="simple">OT Simple (Sin AST/Checklist/Evidencia)</option>
+                            <option value="preventivo">OT Preventivo Normal (Checklist + Evidencia)</option>
+                            <option value="correctivo_repuesto">OT Correctivo con Repuestos (Insumos + Diagnóstico)</option>
+                            <option value="critica_ast">OT Crítica con AST (Firma requerida)</option>
+                            <option value="loto_hse">OT con LOTO / HSE (Permisos + Firmas + Validaciones)</option>
                           </select>
                         </div>
                         )}
 
                         {selectedOt.estado === 'Devuelta a ejecución' && (
-                          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-xs text-rose-300 font-mono space-y-1.5">
+                          <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 text-xs text-rose-300 space-y-1.5">
                             <div className="font-bold flex items-center gap-1 text-rose-400 text-xs">
-                              <span>↩️ DETALLES DE LA DEVOLUCIÓN</span>
+                              <CornerDownRight className="h-4 w-4" aria-hidden="true" /><span>Detalle de la devolución</span>
                             </div>
                             {selectedOt.motivoDevolucion && (
                               <p><span className="text-rose-400 font-semibold">Motivo:</span> {selectedOt.motivoDevolucion}</p>
@@ -1746,22 +1747,22 @@ export default function VistaTerreno({
                           <div className="space-y-3.5 animate-fade-in">
                             <div className="text-center space-y-1">
                               <MapPin className="h-8 w-8 text-cyan-400 mx-auto animate-bounce" />
-                              <h4 className="text-xs font-bold text-slate-200">Paso 1: Check-in en Planta (Simulado)</h4>
+                              <h4 className="text-xs font-bold text-slate-200">Paso 1: Llegada a planta</h4>
                               <p className="text-xs text-slate-400">Verifique el estado de su terminal y registre la confirmación de llegada simulada.</p>
                             </div>
 
                             <div className="space-y-2 bg-slate-900 p-3 rounded-xl border border-slate-850">
                               <div>
-                                <label className="text-xs font-mono text-slate-500 block uppercase">Hora de Entrada Terreno</label>
+                                <label className="text-xs text-slate-500 block">Hora de Entrada Terreno</label>
                                 <input
                                   type="text"
                                   value={tempHoraLlegada}
                                   onChange={(e) => setTempHoraLlegada(e.target.value)}
-                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none font-mono"
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none"
                                 />
                               </div>
                               <div>
-                                <label className="text-xs font-mono text-slate-500 block uppercase">Observación de Arribo</label>
+                                <label className="text-xs text-slate-500 block">Observación de Arribo</label>
                                 <textarea
                                   rows={2}
                                   value={tempObsLlegada}
@@ -1772,12 +1773,9 @@ export default function VistaTerreno({
                               </div>
                             </div>
 
-                            <button
-                              onClick={handleConfirmArrival}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
-                            >
-                              Confirmar Arribo <ChevronRight className="h-4 w-4" />
-                            </button>
+                            <Button variant="primary" fullWidth onClick={handleConfirmArrival}>
+                              Confirmar llegada <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                            </Button>
                           </div>
                         )}
 
@@ -1792,8 +1790,8 @@ export default function VistaTerreno({
 
                             <div className="space-y-3 bg-slate-900 p-3 rounded-xl border border-slate-850 text-xs">
                               <div className="flex justify-between items-center border-b border-slate-850 pb-2">
-                                <span className="text-slate-400 font-mono text-xs">¿Requiere AST?</span>
-                                <span className="text-emerald-400 font-bold font-mono">REQUERIDO</span>
+                                <span className="text-slate-400 text-xs">¿Requiere AST?</span>
+                                <span className="text-emerald-400 font-bold">REQUERIDO</span>
                               </div>
 
                               {/* Firma de AST */}
@@ -1812,7 +1810,7 @@ export default function VistaTerreno({
 
                               {/* Riesgos Detectados */}
                               <div>
-                                <span className="text-xs font-mono text-slate-500 uppercase block mb-1">Riesgos Detectados Terreno</span>
+                                <span className="text-xs text-slate-500 block mb-1">Riesgos Detectados Terreno</span>
                                 <div className="grid grid-cols-2 gap-1.5">
                                   {['Riesgo Eléctrico', 'Trabajo en Altura', 'Hotspots / Calor', 'Caída de Objeto'].map(r => {
                                     const active = tempRiesgos.includes(r);
@@ -1824,7 +1822,7 @@ export default function VistaTerreno({
                                           if (active) setTempRiesgos(tempRiesgos.filter(x => x !== r));
                                           else setTempRiesgos([...tempRiesgos, r]);
                                         }}
-                                        className={`p-1 text-xs font-mono border rounded text-left truncate transition-colors ${
+                                        className={`p-1 text-xs border rounded text-left truncate transition-colors ${
                                           active ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 font-bold' : 'bg-slate-950 text-slate-400 border-slate-800'
                                         }`}
                                       >
@@ -1837,19 +1835,19 @@ export default function VistaTerreno({
 
                               {/* Permiso de trabajo */}
                               <div>
-                                <label className="text-xs font-mono text-slate-500 block uppercase">Nº Permiso de Trabajo O&M</label>
+                                <label className="text-xs text-slate-500 block">Nº Permiso de Trabajo O&M</label>
                                 <input
                                   type="text"
                                   placeholder="Ej: PT-9481-OM-CHILE"
                                   value={tempPermisoTrabajoNum}
                                   onChange={(e) => setTempPermisoTrabajoNum(e.target.value)}
-                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none font-mono"
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none"
                                 />
                               </div>
 
                               {/* Firma Ejecutor */}
                               <div>
-                                <label className="text-xs font-mono text-slate-500 block uppercase">Firma Digital del Ejecutor (Nombre)</label>
+                                <label className="text-xs text-slate-500 block">Firma Digital del Ejecutor (Nombre)</label>
                                 <input
                                   type="text"
                                   placeholder="Escriba su nombre completo"
@@ -1867,7 +1865,7 @@ export default function VistaTerreno({
 
                             <button
                               onClick={handleSaveSecurity}
-                              className="w-full py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1 transition-colors"
+                              className="w-full min-h-11 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1 transition-colors"
                             >
                               Registrar Seguridad <ChevronRight className="h-4 w-4" />
                             </button>
@@ -1944,7 +1942,7 @@ export default function VistaTerreno({
                                       onClick={() => handleToggleChecklistField(idx, 'completado')}
                                       className={toggle(Boolean(item.completado), 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60')}
                                     >
-                                      {item.completado ? '✓ Hecho' : 'Hecho'}
+                                      {item.completado && <Check className="h-4 w-4" aria-hidden="true" />}Hecho
                                     </button>
                                     <button
                                       type="button"
@@ -1952,7 +1950,7 @@ export default function VistaTerreno({
                                       onClick={() => handleToggleChecklistField(idx, 'noAplica')}
                                       className={toggle(Boolean(item.noAplica), 'bg-indigo-500/20 text-indigo-300 border-indigo-500/60')}
                                     >
-                                      {item.noAplica ? '✓ No aplica' : 'No aplica'}
+                                      {item.noAplica && <Check className="h-4 w-4" aria-hidden="true" />}No aplica
                                     </button>
                                     <button
                                       type="button"
@@ -1960,7 +1958,7 @@ export default function VistaTerreno({
                                       onClick={() => handleToggleChecklistField(idx, 'hallazgo')}
                                       className={toggle(Boolean(item.hallazgo), 'bg-amber-500/20 text-amber-300 border-amber-500/60')}
                                     >
-                                      {item.hallazgo ? '⚠ Hallazgo' : 'Hallazgo'}
+                                      {item.hallazgo && <AlertTriangle className="h-4 w-4" aria-hidden="true" />}Hallazgo
                                     </button>
                                   </div>
 
@@ -1977,12 +1975,9 @@ export default function VistaTerreno({
                               })}
                             </div>
 
-                            <button
-                              onClick={handleSaveChecklist}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
-                            >
-                              Guardar Checklist <ChevronRight className="h-4 w-4" />
-                            </button>
+                            <Button variant="primary" fullWidth onClick={handleSaveChecklist}>
+                              Guardar checklist <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                            </Button>
                           </div>
                         )}
 
@@ -1991,36 +1986,36 @@ export default function VistaTerreno({
                           <div className="space-y-4 animate-fade-in">
                             <div className="text-center space-y-1">
                               <Camera className="h-8 w-8 text-indigo-400 mx-auto" />
-                              <h4 className="text-xs font-bold text-slate-200">Paso 4: Evidence Pack</h4>
+                              <h4 className="text-xs font-bold text-slate-200">Paso 4: Fotos de evidencia</h4>
                               <p className="text-xs text-slate-400">Registre evidencias de terreno asociadas al activo.</p>
                             </div>
 
                             {/* FOTOS REQUERIDAS (REGLA 7) */}
                             <div className="bg-slate-950 p-3 rounded-xl border border-slate-900 space-y-2">
-                              <span className="text-xs font-mono text-slate-500 uppercase font-bold block border-b border-slate-900 pb-1">FOTOS REQUERIDAS EN TERRENO:</span>
-                              <div className="space-y-1.5 text-xs font-mono">
+                              <span className="text-sm text-slate-300 font-semibold block border-b border-slate-900 pb-1">Fotos requeridas</span>
+                              <div className="space-y-1.5 text-sm">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-300">📸 1. Foto Antes (LOTO / Seguridad):</span>
+                                  <span className="text-slate-300">1. Antes (LOTO / Seguridad):</span>
                                   {tempEvidenceList.some(e => e.type === 'before' || e.type === 'hse') ? (
-                                    <span className="text-emerald-400 font-extrabold uppercase text-xs flex items-center gap-0.5">🟢 Cargada</span>
+                                    <span className="text-ok font-semibold text-xs flex items-center gap-1"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Cargada</span>
                                   ) : (
-                                    <span className="text-slate-500 font-bold uppercase text-xs">⚪ Pendiente</span>
+                                    <span className="text-slate-400 text-xs">Pendiente</span>
                                   )}
                                 </div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-300">📸 2. Foto Durante (Trabajo / Rejilla):</span>
+                                  <span className="text-slate-300">2. Durante (Trabajo / Rejilla):</span>
                                   {tempEvidenceList.some(e => e.type === 'during' || e.type === 'spare') ? (
-                                    <span className="text-emerald-400 font-extrabold uppercase text-xs flex items-center gap-0.5">🟢 Cargada</span>
+                                    <span className="text-ok font-semibold text-xs flex items-center gap-1"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Cargada</span>
                                   ) : (
-                                    <span className="text-slate-500 font-bold uppercase text-xs">⚪ Pendiente</span>
+                                    <span className="text-slate-400 text-xs">Pendiente</span>
                                   )}
                                 </div>
                                 <div className="flex justify-between items-center">
-                                  <span className="text-slate-300">📸 3. Foto Después (Limpieza / Orden):</span>
+                                  <span className="text-slate-300">3. Después (Limpieza / Orden):</span>
                                   {tempEvidenceList.some(e => e.type === 'after') ? (
-                                    <span className="text-emerald-400 font-extrabold uppercase text-xs flex items-center gap-0.5">🟢 Cargada</span>
+                                    <span className="text-ok font-semibold text-xs flex items-center gap-1"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Cargada</span>
                                   ) : (
-                                    <span className="text-slate-500 font-bold uppercase text-xs">⚪ Pendiente</span>
+                                    <span className="text-slate-400 text-xs">Pendiente</span>
                                   )}
                                 </div>
                               </div>
@@ -2028,7 +2023,7 @@ export default function VistaTerreno({
 
                             {/* FOTOS CARGADAS (REGLA 7) */}
                             {tempEvidenceList.length > 0 && (
-                              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-xs max-h-[120px] overflow-y-auto font-mono">
+                              <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-xs max-h-[120px] overflow-y-auto">
                                 <span className="text-xs text-slate-500 uppercase block font-bold">Fotos de la OT ({tempEvidenceList.length}){tempEvidenceList.some(e => isPendingPhoto(e.fileUrl)) ? ' · algunas esperan señal' : ''}</span>
                                 {tempEvidenceList.map((ev) => (
                                   <div key={ev.evidenceId} className="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-900">
@@ -2054,12 +2049,12 @@ export default function VistaTerreno({
 
                             {/* FORMULARIO AGREGAR EVIDENCIA (REGLA 7) */}
                             <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-2 text-xs">
-                              <span className="text-xs font-mono text-indigo-400 uppercase font-bold block">Agregar Evidencia de Campo</span>
+                              <span className="text-xs text-indigo-400 font-bold block">Agregar Evidencia de Campo</span>
                               <div>
                                 <select
                                   value={newEvidenceType}
                                   onChange={(e) => setNewEvidenceType(e.target.value as any)}
-                                  className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-white outline-none font-mono"
+                                  className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-white outline-none"
                                 >
                                   <option value="before">Antes de intervenir (HSE/LOTO)</option>
                                   <option value="during">Durante el trabajo (Limpieza)</option>
@@ -2087,7 +2082,7 @@ export default function VistaTerreno({
                               </div>
 
                               <label
-                                className={`w-full py-1.5 bg-indigo-500/10 hover:bg-indigo-500 hover:text-slate-950 font-mono text-sm font-bold rounded border border-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors ${simulatingPhoto ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+                                className={`w-full min-h-11 py-1.5 bg-indigo-500/10 hover:bg-indigo-500 hover:text-slate-950 text-sm font-bold rounded border border-indigo-500/20 flex items-center justify-center gap-1.5 transition-colors ${simulatingPhoto ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
                               >
                                 <input
                                   type="file"
@@ -2118,7 +2113,7 @@ export default function VistaTerreno({
 
                             {/* MENSAJE DE COMPLEMENTO DE ACTIVO */}
                             {activoCompletadoMsg && (
-                              <div className="bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg text-xs text-emerald-400 font-mono flex items-center gap-1.5 animate-fade-in">
+                              <div className="bg-emerald-500/10 border border-emerald-500/20 p-2 rounded-lg text-xs text-emerald-400 flex items-center gap-1.5 animate-fade-in">
                                 <CheckSquare className="h-3.5 w-3.5 shrink-0" />
                                 <span>{activoCompletadoMsg}</span>
                               </div>
@@ -2128,7 +2123,7 @@ export default function VistaTerreno({
 
                             <button
                               onClick={() => setExecutionStep(5)}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
+                              className="w-full min-h-11 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-lg flex items-center justify-center gap-1"
                             >
                               Siguiente Paso <ChevronRight className="h-4 w-4" />
                             </button>
@@ -2161,22 +2156,22 @@ export default function VistaTerreno({
                             <div className="space-y-2 bg-slate-900 p-2.5 rounded-xl border border-slate-850 max-h-[260px] overflow-y-auto text-xs">
                               <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                  <label className="text-xs font-mono text-slate-500 block uppercase">HH Trabajadas hoy</label>
+                                  <label className="text-xs text-slate-500 block">HH Trabajadas hoy</label>
                                   <input
                                     type="number"
                                     min="1"
                                     value={tempHhReales}
                                     onChange={(e) => setTempHhReales(Math.max(1, parseInt(e.target.value) || 0))}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none font-mono"
+                                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none"
                                   />
                                 </div>
-                                <div className="text-xs font-mono text-slate-400 flex items-end pb-1 leading-tight">
+                                <div className="text-xs text-slate-400 flex items-end pb-1 leading-tight">
                                   *Estimadas originales: {selectedOt.hhEstimadas || 2} HH
                                 </div>
                               </div>
 
                               <div>
-                                <label className="text-xs font-mono text-slate-500 block uppercase">Diagnóstico Final</label>
+                                <label className="text-xs text-slate-500 block">Diagnóstico Final</label>
                                 <textarea
                                   rows={2}
                                   value={tempDiagnosticoFinal}
@@ -2187,7 +2182,7 @@ export default function VistaTerreno({
                               </div>
 
                               <div>
-                                <label className="text-xs font-mono text-slate-500 block uppercase">Acción Correctiva Realizada</label>
+                                <label className="text-xs text-slate-500 block">Acción Correctiva Realizada</label>
                                 <textarea
                                   rows={2}
                                   value={tempAccionRealizada}
@@ -2199,7 +2194,7 @@ export default function VistaTerreno({
 
                               {/* Sección de Repuestos Utilizados */}
                               <div className="border-t border-slate-800 pt-2 space-y-1">
-                                <span className="text-xs font-mono text-slate-500 uppercase block">Repuestos Consumidos en Turno</span>
+                                <span className="text-xs text-slate-500 block">Repuestos Consumidos en Turno</span>
                                 {tempSparesUsed.length > 0 && (
                                   <div className="space-y-1">
                                     {tempSparesUsed.map(s => (
@@ -2207,7 +2202,7 @@ export default function VistaTerreno({
                                         <span className="truncate">{s.nombre} ({s.codigo}) x{s.cantidad}</span>
                                         <button
                                           onClick={() => handleRemoveRepuestoTerreno(s.codigo, s.cantidad)}
-                                          className="text-slate-500 hover:text-rose-400 font-bold font-mono px-1"
+                                          className="text-slate-500 hover:text-rose-400 font-bold px-1"
                                         >
                                           ×
                                         </button>
@@ -2237,7 +2232,7 @@ export default function VistaTerreno({
                                     min="1"
                                     value={repuestoCantidad}
                                     onChange={(e) => setRepuestoCantidad(Math.max(1, parseInt(e.target.value) || 1))}
-                                    className="w-10 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-xs text-white text-center font-mono"
+                                    className="w-10 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-xs text-white text-center"
                                   />
                                   <button
                                     onClick={handleAddRepuestoTerreno}
@@ -2251,7 +2246,7 @@ export default function VistaTerreno({
 
                             <button
                               onClick={handleSaveHHAndDiagnosis}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs font-mono rounded-lg flex items-center justify-center gap-1"
+                              className="w-full min-h-11 py-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs rounded-lg flex items-center justify-center gap-1"
                             >
                               Guardar Recursos <ChevronRight className="h-4 w-4" />
                             </button>
@@ -2268,7 +2263,7 @@ export default function VistaTerreno({
                             </div>
 
                             {/* Alerta de validaciones de cumplimiento (Regla 2) */}
-                            <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-xs font-mono">
+                            <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-850 space-y-1.5 text-xs">
                               <span className="text-slate-500 uppercase block text-xs">Validaciones de Compliance</span>
                               
                               {selectedOt.requiereChecklist !== false && (
@@ -2328,7 +2323,7 @@ export default function VistaTerreno({
                             <div className="space-y-2.5">
                               {/* Opción 1: Proponer Cierre */}
                               <div className="bg-emerald-950/25 border border-emerald-500/20 p-2.5 rounded-xl space-y-2">
-                                <h5 className="font-bold text-emerald-400 font-mono text-xs uppercase">
+                                <h5 className="font-bold text-emerald-400 text-xs">
                                   {selectedOt.estado === 'Devuelta a ejecución' ? 'Opción A: Reenviar a Revisión de Cierre' : 'Opción A: Proponer Cierre Técnico'}
                                 </h5>
                                 <input
@@ -2338,25 +2333,18 @@ export default function VistaTerreno({
                                   onChange={(e) => setComentarioCierre(e.target.value)}
                                   className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-sm text-white outline-none"
                                 />
-                                <button
-                                  onClick={handleProposeClosure}
-                                  className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold font-mono rounded"
-                                >
-                                  {selectedOt.estado === 'Devuelta a ejecución' ? '🔄 Reenviar a Revisión de Cierre' : '🚀 Solicitar Cierre de OT'}
-                                </button>
+                                <Button variant="primary" fullWidth onClick={handleProposeClosure}>
+                                  {selectedOt.estado === 'Devuelta a ejecución' ? 'Reenviar a revisión de cierre' : 'Solicitar cierre de OT'}
+                                </Button>
                               </div>
 
                               {/* Opción 2: Registrar Bloqueo */}
                               <div className="bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl space-y-1">
-                                <h5 className="font-bold text-rose-400 font-mono text-xs uppercase">Opción B: Reportar Bloqueo de Campo</h5>
+                                <h5 className="font-bold text-rose-400 text-xs">Opción B: Reportar Bloqueo de Campo</h5>
                                 <p className="text-xs text-slate-400">Detenga la ejecución si se presenta alguna condición o carencia insuperable.</p>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowBlockerModal(true)}
-                                  className="w-full py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold font-mono rounded border border-rose-500/30"
-                                >
-                                  ⚠️ Registrar Bloqueo Activo
-                                </button>
+                                <Button variant="danger" fullWidth onClick={() => setShowBlockerModal(true)} icon={<AlertTriangle />}>
+                                  Registrar bloqueo
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -2371,7 +2359,7 @@ export default function VistaTerreno({
                   <div className="space-y-4">
                     <div className="flex justify-between items-center border-b border-slate-900 pb-2">
                       <div>
-                        <h3 className="text-xs font-mono text-slate-500 uppercase">Supervisor de Turno</h3>
+                        <h3 className="text-xs text-slate-500">Supervisor de Turno</h3>
                         <h2 className="text-sm font-bold text-slate-100">Panel de Control Terreno</h2>
                       </div>
                       <Shield className="h-4 w-4 text-cyan-400 animate-pulse" />
@@ -2390,7 +2378,7 @@ export default function VistaTerreno({
                     </div>
 
                     {/* Resumen rápido para Supervisor */}
-                    <div className="grid grid-cols-2 gap-2 text-center text-xs font-mono">
+                    <div className="grid grid-cols-2 gap-2 text-center text-xs">
                       <div className="bg-amber-500/10 border border-amber-500/20 p-1.5 rounded-lg">
                         <span className="text-amber-400 font-bold block text-sm">{closureProposalOts.length}</span>
                         <span className="text-slate-500 text-xs uppercase">Por revisar</span>
@@ -2403,48 +2391,48 @@ export default function VistaTerreno({
 
                     {/* Lista de propuestas de cierre para el Supervisor */}
                     <div className="space-y-2.5">
-                      <h4 className="text-xs font-mono text-slate-500 uppercase tracking-wider">Propuestas de Cierre</h4>
+                      <h4 className="text-xs text-slate-500">Propuestas de Cierre</h4>
                       {closureProposalOts.map((ot) => (
                         <div key={ot.codigo} className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 text-xs">
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-mono text-slate-500">{ot.codigo}</span>
-                            <span className="text-xs font-mono text-cyan-400 bg-cyan-950 px-1.5 rounded">Pendiente</span>
+                            <span className="text-xs text-cyan-400 bg-cyan-950 px-1.5 rounded">Pendiente</span>
                           </div>
                           <div>
                             <h5 className="font-bold text-slate-200 truncate">{ot.activo}</h5>
                             <p className="text-xs text-slate-400">{ot.plantaNombre}</p>
                           </div>
 
-                          <div className="bg-slate-950 p-2 rounded text-xs font-mono border border-slate-900 text-slate-300">
+                          <div className="bg-slate-950 p-2 rounded text-xs border border-slate-900 text-slate-300">
                             <strong>Obs Técnico:</strong> {ot.comentarioPropuestaCierre || 'N/A'}
                           </div>
 
                           {/* Acciones del Supervisor en la OT */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-950 font-mono text-xs">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-950 text-xs">
                             <button
                               onClick={() => {
                                 const comm = prompt('Ingrese observaciones técnicas para devolver a ejecución:');
                                 if (comm !== null) handleSupervisorRejectToExecution(ot.codigo, comm);
                               }}
-                              className="py-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 rounded border border-rose-500/30 font-bold"
+                              className={buttonClass('danger')}
                             >
-                              ✕ Devolver
+                              <X className="h-4 w-4" aria-hidden="true" /> Devolver
                             </button>
                             <button
                               onClick={() => {
                                 const comm = prompt('Ingrese comentarios finales de cierre técnico:');
                                 if (comm !== null) handleSupervisorApproveFinalClosure(ot.codigo, comm);
                               }}
-                              className="py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded border border-emerald-500/30 font-bold"
+                              className={buttonClass('primary')}
                             >
-                              ✔ Aprobar Cierre
+                              <Check className="h-4 w-4" aria-hidden="true" /> Aprobar cierre
                             </button>
                           </div>
                         </div>
                       ))}
 
                       {closureProposalOts.length === 0 && (
-                        <div className="text-center py-6 text-xs text-slate-600 font-mono border border-dashed border-slate-900 rounded-xl">
+                        <div className="text-center py-6 text-xs text-slate-600 border border-dashed border-slate-900 rounded-xl">
                           No hay propuestas de cierre técnico pendientes de revisión.
                         </div>
                       )}
@@ -2452,7 +2440,7 @@ export default function VistaTerreno({
 
                     {/* Lista de bloqueos activos */}
                     <div className="space-y-2.5 pt-2">
-                      <h4 className="text-xs font-mono text-slate-500 uppercase tracking-wider">Bloqueos de Sitio</h4>
+                      <h4 className="text-xs text-slate-500">Bloqueos de Sitio</h4>
                       {blockedOts.map((ot) => (
                         <div key={ot.codigo} className="bg-slate-900 border border-red-500/20 rounded-xl p-3 space-y-1.5 text-xs bg-red-950/5">
                           <div className="flex justify-between items-center text-xs font-mono">
@@ -2460,7 +2448,7 @@ export default function VistaTerreno({
                             <span className="text-red-400 font-bold">BLOQUEADA</span>
                           </div>
                           <h5 className="font-bold text-slate-200 truncate">{ot.activo}</h5>
-                          <p className="text-xs text-red-300 font-mono italic leading-tight">
+                          <p className="text-xs text-red-300 italic leading-tight">
                             Motivo: {ot.motivoBloqueo}
                           </p>
                           <div className="pt-2">
@@ -2469,15 +2457,15 @@ export default function VistaTerreno({
                                 const mot = prompt('Ingrese el detalle del escalamiento formal:');
                                 if (mot) handleSupervisorEscalate(ot.codigo, mot);
                               }}
-                              className="w-full py-1 bg-red-500/15 hover:bg-red-500/25 text-red-400 font-mono text-xs rounded border border-red-500/30"
+                              className={buttonClass('danger', 'md', 'w-full')}
                             >
-                              🛡️ Escalar a Coordinador O&M
+                              <Shield className="h-4 w-4" aria-hidden="true" /> Escalar a Coordinador O&M
                             </button>
                           </div>
                         </div>
                       ))}
                       {blockedOts.length === 0 && (
-                        <div className="text-center py-6 text-xs text-slate-600 font-mono border border-dashed border-slate-900 rounded-xl">
+                        <div className="text-center py-6 text-xs text-slate-600 border border-dashed border-slate-900 rounded-xl">
                           No hay bloqueos activos reportados desde terreno.
                         </div>
                       )}
@@ -2517,7 +2505,7 @@ export default function VistaTerreno({
                 Configure las condiciones simuladas del terminal del operario en terreno para comprobar la resiliencia offline de ORBI.
               </p>
 
-              <div className="space-y-3 font-mono text-xs">
+              <div className="space-y-3 text-xs">
                 {/* Conectividad de Red */}
                 <div className="flex justify-between items-center p-2.5 bg-slate-950 rounded-lg border border-slate-850">
                   <span>Enlace de Datos Movil</span>
@@ -2578,16 +2566,16 @@ export default function VistaTerreno({
 
               <div className="grid grid-cols-2 gap-3 text-center">
                 <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-850">
-                  <span className="text-xs font-mono text-slate-500 block uppercase">Porcentaje Checklist</span>
-                  <span className="text-2xl font-bold text-white font-mono">
+                  <span className="text-xs text-slate-500 block">Porcentaje Checklist</span>
+                  <span className="text-2xl font-bold text-white">
                     {Math.round(ots.reduce((acc, curr) => acc + (curr.avance || 0), 0) / ots.length)}%
                   </span>
                   <span className="text-xs text-emerald-400 block mt-1">Avance consolidado</span>
                 </div>
 
                 <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-850">
-                  <span className="text-xs font-mono text-slate-500 block uppercase">Con Evidencias</span>
-                  <span className="text-2xl font-bold text-indigo-400 font-mono">
+                  <span className="text-xs text-slate-500 block">Con Evidencias</span>
+                  <span className="text-2xl font-bold text-indigo-400">
                     {ots.filter(o => o.evidencePack && o.evidencePack.length > 0).length}
                   </span>
                   <span className="text-xs text-indigo-300 block mt-1">Órdenes auditadas</span>
@@ -2610,7 +2598,7 @@ export default function VistaTerreno({
               A continuación se listan las transacciones enviadas por los terminales móviles en terreno a la base central inmutable de ORBI.
             </p>
 
-            <div className="bg-slate-950 border border-slate-850 rounded-xl p-4 font-mono text-sm leading-relaxed space-y-3 max-h-[220px] overflow-y-auto">
+            <div className="bg-slate-950 border border-slate-850 rounded-xl p-4 text-sm leading-relaxed space-y-3 max-h-[220px] overflow-y-auto">
               {ots.map((ot) => {
                 const logs: any[] = [];
                 if (ot.llegadaConfirmada) {
@@ -2701,7 +2689,7 @@ export default function VistaTerreno({
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="text-xs font-mono text-slate-500 uppercase block">Tipo de Bloqueo</label>
+                <label className="text-xs text-slate-500 block">Tipo de Bloqueo</label>
                 <select
                   value={blockerType}
                   onChange={(e) => setBlockerType(e.target.value)}
@@ -2718,7 +2706,7 @@ export default function VistaTerreno({
               </div>
 
               <div>
-                <label className="text-xs font-mono text-slate-500 uppercase block">Justificación Técnica</label>
+                <label className="text-xs text-slate-500 block">Justificación Técnica</label>
                 <textarea
                   rows={3}
                   placeholder="Justifique el motivo detalladamente..."
@@ -2729,7 +2717,7 @@ export default function VistaTerreno({
               </div>
             </div>
 
-            <div className="flex gap-2.5 justify-end font-mono text-xs pt-2">
+            <div className="flex gap-2.5 justify-end text-xs pt-2">
               <button
                 onClick={() => setShowBlockerModal(false)}
                 className="px-4 py-2 bg-slate-800 text-slate-400 rounded-lg hover:bg-slate-750"

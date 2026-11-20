@@ -99,6 +99,29 @@ Antes y después: `docs/auditoria-ux/` (antes) y `docs/auditoria-ux/despues-p0/`
 
 Antes y después: `docs/auditoria-ux/` (antes) y `docs/auditoria-ux/despues-p1/` (después).
 
+## Estado de P2 (corregido el 2026-11-20)
+
+| # | Corrección |
+|---|---|
+| 13 | Tokens de estado en el tema (`accent`, `ok`, `warn`, `danger`, `info`, `surface`, `line`, `ink`, `radius-control`, `radius-card`), que siguen al Modo sol. Un solo acento (esmeralda); el error es siempre rose. |
+| 14 | Componente `Button` (`src/components/ui/Button.tsx`): 4 variantes (principal, secundaria, peligro, discreta), 44 px de alto por defecto. Adoptado en inicio de sesión, error de módulo, registro de HH, pasos de Vista Terreno (confirmar llegada, guardar checklist, solicitar cierre, registrar bloqueo) y acciones de supervisión. |
+| 15 | Emojis cambiados por íconos Lucide o eliminados en Vista Terreno, en las pestañas de OT Center y en el aviso de error de la cabecera. |
+| 16 | Vista Terreno: letra de código solo en códigos de OT y de plantilla (65 etiquetas pasan a Inter, sin MAYÚSCULAS forzadas). |
+| 17 | Glosario en español: menú ("Personas y Carga de Trabajo", "Riesgos y Escalamientos", "HSE y Calidad", "Registro de Auditoría", "Inicio Jefatura O&M", "Presentación Ejecutiva", "Preparación de Demo"); pestañas de OT Center ("Órdenes de trabajo", "Programación", "Evidencias", "Permisos de trabajo", "Cierre documental"); Insight ("Vista general", "HH por tipo de OT"); Vista Terreno ("Confirmar llegada", "Paso 4: Fotos de evidencia", "Mi ejecución", "Supervisión"). Se mantienen las marcas ORBI OT Center, Workspace e Insight Center. |
+| 18 | Cada módulo se descarga al abrirlo. **El técnico descarga 164 kB comprimidos en vez de 417 kB (−61 %).** Tras iniciar sesión, los módulos de su rol se descargan en segundo plano para tenerlos sin señal. |
+| 19 | El reloj de la cabecera tiene su propio estado y cambia cada 30 s (antes re-dibujaba toda la app cada segundo). La copia de las OTs en el teléfono se guarda 800 ms después del último cambio y de inmediato al pasar a segundo plano; la consulta periódica al servidor no re-dibuja si nada cambió. |
+
+Correcciones encontradas al probar P2:
+
+- El service worker borraba los archivos que la página no nombraba directamente; con la carga por módulo, eso habría borrado Vista Terreno y el técnico no podría abrirla sin señal. Ahora recorre en cadena los archivos que usa la versión vigente (`public/sw.js`, caché `orbi-shell-v3`).
+- Sin señal, la app abría en "Inicio" en lugar de la vista del rol; ahora abre igual que con señal.
+- Si un módulo nunca abierto no está disponible sin señal, se explica en español (antes, un error técnico en inglés).
+- Prueba automática nueva (paso 8 de `tests/e2e/piloto.spec.ts`): el técnico abre la app desde cero sin señal y ve sus OTs.
+
+Pendiente para llegar a ~120 kB: el núcleo de la app todavía incluye el catastro de 59 plantas y el organigrama (`src/data/db.ts`); separarlos es un cambio de datos mayor.
+
+Capturas: `docs/auditoria-ux/despues-p2/`.
+
 ## Capturas
 
 | PC — Inicio | PC — Insight Center | Teléfono — menú | Teléfono — checklist |

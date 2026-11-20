@@ -1122,105 +1122,33 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
         </div>
       </div>
 
-      {/* Sub-view Navigation Tabs */}
-      <div className="flex gap-2 border-b border-slate-850 pb-2">
-        <button
-          onClick={() => {
-            setActiveSubView('ots');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'ots' && !editingOt
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          📋 Gestión de Órdenes de Trabajo (OT)
-        </button>
-        <button
-          onClick={() => {
-            setActiveSubView('scheduler');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'scheduler'
-              ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          📅 {isTechnician ? 'Mi Agenda Técnica' : 'ORBI Scheduler IA'}
-        </button>
-        <button
-          onClick={() => {
-            setActiveSubView('vault');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'vault'
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          🔒 ORBI Evidence Vault &amp; Control GEO
-        </button>
-        {!isTechnician && (
-          <button
-            onClick={() => {
-              setActiveSubView('sharepoint');
-              setEditingOt(null);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-              activeSubView === 'sharepoint'
-                ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-            }`}
-          >
-            📁 Archivo SharePoint (simulado)
-          </button>
-        )}
-        <button
-          onClick={() => {
-            setActiveSubView('ptw');
-            setEditingOt(null);
-          }}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-            activeSubView === 'ptw'
-              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-              : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-          }`}
-        >
-          🛡️ ORBI PTW Center (Permisos)
-        </button>
-        {!isTechnician && (
-          <button
-            onClick={() => {
-              setActiveSubView('inventory');
-              setEditingOt(null);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-              activeSubView === 'inventory'
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-            }`}
-          >
-            📦 Inventario O&M
-          </button>
-        )}
-        {!isTechnician && (
-          <button
-            onClick={() => {
-              setActiveSubView('reports');
-              setEditingOt(null);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-              activeSubView === 'reports'
-                ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900/40'
-            }`}
-          >
-            📊 Report Center
-          </button>
-        )}
+      {/* Pestañas de OT Center (17A UX P2: nombres en español, íconos Lucide y un solo acento) */}
+      <div role="tablist" aria-label="Secciones de OT Center" className="flex flex-wrap gap-2 border-b border-slate-850 pb-2">
+        {([
+          { id: 'ots', label: 'Órdenes de trabajo', icon: ClipboardList, show: true },
+          { id: 'scheduler', label: isTechnician ? 'Mi agenda' : 'Programación', icon: Calendar, show: true },
+          { id: 'vault', label: 'Evidencias', icon: Camera, show: true },
+          { id: 'sharepoint', label: 'Archivo SharePoint (simulado)', icon: FolderSync, show: !isTechnician },
+          { id: 'ptw', label: 'Permisos de trabajo', icon: ShieldCheck, show: true },
+          { id: 'inventory', label: 'Inventario O&M', icon: Package, show: !isTechnician },
+          { id: 'reports', label: 'Cierre documental', icon: FileText, show: !isTechnician },
+        ] as const).filter(t => t.show).map(t => {
+          const activa = activeSubView === t.id && !(t.id === 'ots' && editingOt);
+          const Icono = t.icon;
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={activa}
+              onClick={() => { setActiveSubView(t.id as any); setEditingOt(null); }}
+              className={`min-h-10 px-4 rounded-[var(--radius-control)] text-sm font-medium transition-colors flex items-center gap-2 ${
+                activa ? 'bg-accent/10 text-accent border border-accent/30' : 'text-slate-400 border border-transparent hover:text-white hover:bg-slate-900/40'
+              }`}
+            >
+              <Icono className="h-4 w-4" aria-hidden="true" /> {t.label}
+            </button>
+          );
+        })}
       </div>
 
       {activeSubView === 'scheduler' ? (
@@ -2005,7 +1933,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
                 { label: 'Planificación', icon: Calendar },
                 { label: 'Personas', icon: User },
                 { label: 'Logística', icon: Truck },
-                { label: 'Repuestos & Herramientas', icon: Wrench },
+                { label: 'Repuestos y Herramientas', icon: Wrench },
                 { label: 'Ejecución Terreno', icon: ClipboardList },
                 { label: 'Evidencias', icon: Camera },
                 { label: 'HSE & Calidad', icon: ShieldCheck },

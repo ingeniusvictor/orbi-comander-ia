@@ -12,20 +12,11 @@ import {
   ASSET_TYPES, PERIODICIDADES, DEFAULT_CODES, assetPath, validateAssets, parseAssetsCsv, validatePlan, validateTemplate, localIsoDate,
   type Asset, type AssetType, type ChecklistTemplate, type ChecklistTemplateItem, type PmPlan, type Periodicidad, type CmmsCodes,
 } from '../domain/cmms';
-import { readStorageCollection, writeStorageCollection } from '../data/storage';
+import { writeStorageCollection } from '../data/storage';
 import { api, SYNC_EVENTS } from '../data/serverSync';
 
-export const CMMS_STORAGE = {
-  ASSETS: 'orbi_cmms_assets_v1',
-  TEMPLATES: 'orbi_cmms_checklist_templates_v1',
-  PLANS: 'orbi_cmms_pm_plans_v1',
-  CODES: 'orbi_cmms_codes_v1',
-} as const;
-
-export const loadAssets = () => readStorageCollection<Asset[]>(CMMS_STORAGE.ASSETS, []);
-export const loadTemplates = () => readStorageCollection<ChecklistTemplate[]>(CMMS_STORAGE.TEMPLATES, []);
-export const loadPlans = () => readStorageCollection<PmPlan[]>(CMMS_STORAGE.PLANS, []);
-export const loadCodes = (): CmmsCodes => readStorageCollection<CmmsCodes[]>(CMMS_STORAGE.CODES, [DEFAULT_CODES])[0] ?? DEFAULT_CODES;
+export { CMMS_STORAGE, loadAssets, loadTemplates, loadPlans, loadCodes } from '../data/cmmsStore';
+import { CMMS_STORAGE, loadAssets, loadTemplates, loadPlans, loadCodes } from '../data/cmmsStore';
 
 const PLANNER_ROLES = ['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADOR_OM', 'PLANIFICACION'];
 

@@ -4,6 +4,7 @@
  */
 import React from 'react';
 
+import Button from './ui/Button';
 interface Props {
   children: React.ReactNode;
   /** Nombre del módulo, para el mensaje. */
@@ -38,17 +39,28 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (!this.state.error) return this.props.children;
+    // 17A UX P2: los módulos se descargan al abrirlos. Sin señal, uno que nunca se abrió en este
+    // equipo no está disponible: se explica en español y "Reintentar" recarga (la descarga fallida
+    // queda memorizada por React, así que limpiar el error no bastaría).
+    if (/dynamically imported module|Importing a module script failed|error loading dynamically/i.test(this.state.error.message)) {
+      return (
+        <div role="alert" className="m-6 p-6 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-100 space-y-3">
+          <h2 className="text-sm font-bold">{this.props.modulo || 'Este módulo'} no está disponible sin señal.</h2>
+          <p className="text-sm">Todavía no se había descargado en este equipo. Vuelve a intentarlo cuando tengas conexión; tus datos guardados no se borraron.</p>
+          <Button variant="secondary" onClick={() => window.location.reload()}>
+            Reintentar
+          </Button>
+        </div>
+      );
+    }
     return (
       <div role="alert" className="m-6 p-6 rounded-xl border border-rose-500/40 bg-rose-500/10 text-rose-200 space-y-3">
         <h2 className="text-sm font-bold">Ocurrió un error en {this.props.modulo || 'este módulo'}.</h2>
         <p className="text-xs font-mono break-words">{this.state.error.message}</p>
         <p className="text-xs">Tus datos guardados no se borraron. Puedes reintentar o cambiar de módulo.</p>
-        <button
-          onClick={() => this.setState({ error: null })}
-          className="px-3 py-1.5 rounded-lg bg-rose-500 text-slate-950 text-xs font-bold"
-        >
+        <Button variant="danger" onClick={() => this.setState({ error: null })}>
           Reintentar
-        </button>
+        </Button>
       </div>
     );
   }

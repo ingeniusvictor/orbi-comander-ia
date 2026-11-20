@@ -4,6 +4,7 @@
 import React, { useState } from 'react';
 import { login, changePassword, ApiError, type SessionInfo } from '../data/serverSync';
 
+import Button from './ui/Button';
 interface Props {
   mode: 'login' | 'change-password';
   onDone: (session?: SessionInfo) => void;
@@ -79,9 +80,9 @@ export default function LoginScreen({ mode, onDone }: Props) {
 
         {error && <div role="alert" className="text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg p-2">{error}</div>}
 
-        <button type="submit" disabled={busy} className="w-full py-2.5 rounded-lg bg-emerald-500 text-slate-950 text-sm font-bold disabled:opacity-60">
+        <Button type="submit" variant="primary" fullWidth disabled={busy}>
           {busy ? 'Un momento…' : mode === 'login' ? 'Entrar' : 'Guardar contraseña'}
-        </button>
+        </Button>
       </form>
     </div>
   );

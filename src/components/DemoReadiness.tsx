@@ -1081,7 +1081,7 @@ Límites de la Demo Sandbox:
                         <button
                           onClick={() => {
                             const viewsMap: Record<number, string> = {
-                              1: "Home Jefatura O&M",
+                              1: "Inicio Jefatura O&M",
                               2: "Vista Terreno",
                               3: "ORBI Workspace (Scheduler IA)",
                               4: "ORBI Workspace (Resource Planner)",
@@ -1093,7 +1093,7 @@ Límites de la Demo Sandbox:
                               10: "Release & Demo Center",
                               11: "Release & Demo Center"
                             };
-                            const vName = viewsMap[step.id] || "Home Jefatura O&M";
+                            const vName = viewsMap[step.id] || "Inicio Jefatura O&M";
                             setMockNavAlert(`Redirección en demo real para el rol [${step.roles.join(" / ")}]: Seleccione el botón "[${vName}]" en el menú lateral izquierdo para ver este paso en acción.`);
                           }}
                           className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-teal-400 font-bold border border-teal-500/20 rounded-lg flex items-center gap-1.5 transition-colors"

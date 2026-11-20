@@ -413,7 +413,7 @@ export default function InsightCenter({
           }`}
         >
           <Activity className="h-3.5 w-3.5" />
-          <span>Executive Landing</span>
+          <span>Vista general</span>
         </button>
         <button
           onClick={() => { setActiveTab('resumen'); }}
@@ -479,7 +479,7 @@ export default function InsightCenter({
           }`}
         >
           <TrendingUp className="h-3.5 w-3.5" />
-          <span>HH Mix por Tipo WO</span>
+          <span>HH por tipo de OT</span>
         </button>
         <button
           onClick={() => { setActiveTab('gerencia'); }}

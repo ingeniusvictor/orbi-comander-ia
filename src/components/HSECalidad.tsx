@@ -141,7 +141,7 @@ export default function HSECalidad({
       <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-emerald-400" /> HSE & Quality Bridge
+            <ShieldAlert className="h-5 w-5 text-emerald-400" /> HSE y Calidad
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Gestión de seguridad operacional, auditorías de terreno, permisos de trabajo (AST/PT) y aseguramiento de calidad (QA/QC).

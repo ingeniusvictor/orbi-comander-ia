@@ -90,7 +90,7 @@ export default function PeopleResource({
     if (onAddAuditLog) {
       onAddAuditLog(
         `Ficha de personal actualizada`,
-        'People & Resource Center',
+        'Personas y Carga de Trabajo',
         undefined,
         undefined,
         `Se actualizaron los datos del recurso humano: ${editingPersona.nombre} (${editingPersona.rol}). Estado: ${editingPersona.estadoDisponibilidad}. Carga: ${editingPersona.cargaSemanal}%.`,
@@ -132,7 +132,7 @@ export default function PeopleResource({
     if (onAddAuditLog) {
       onAddAuditLog(
         `Estado de activación cambiado`,
-        'People & Resource Center',
+        'Personas y Carga de Trabajo',
         undefined,
         undefined,
         `Se cambió el estado de activación de ${target.nombre} a: ${!target.activo ? 'Activo' : 'Inactivo'}.`,
@@ -159,14 +159,14 @@ export default function PeopleResource({
     
     onAddAuditLog(
       `Sobrecarga de personal escalada`,
-      'People & Resource Center',
+      'Personas y Carga de Trabajo',
       undefined,
       undefined,
       `Se generó un ticket de riesgo en el Risk Center para gestionar el exceso de carga laboral de ${persona.nombre} (${persona.cargaSemanal}%).`,
       persona.cargaSemanal > 100 ? 'Crítica' : 'Alta'
     );
     
-    notify(`Se ha escalado con éxito la sobrecarga laboral de ${persona.nombre} al Risk & Escalation Center.`);
+    notify(`Se ha escalado con éxito la sobrecarga laboral de ${persona.nombre} al Riesgos y Escalamientos.`);
   };
 
   return (
@@ -175,7 +175,7 @@ export default function PeopleResource({
       <div className="bg-slate-900/40 border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Users className="h-5.5 w-5.5 text-cyan-400" /> People & Resource Center
+            <Users className="h-5.5 w-5.5 text-cyan-400" /> Personas y Carga de Trabajo
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Gestión del recurso humano O&M. Controla disponibilidad, carga de trabajo semanal, asignación de zonas operacionales y competencias técnicas específicas.

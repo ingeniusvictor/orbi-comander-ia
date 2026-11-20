@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import { PlanPreventivo, Planta, OT, OTEstado, OTType, OTPrioridad, OrganigramaNode, RoleType } from '../types';
 import { transitionOT } from '../domain/otStateMachine';
-import { loadCodes } from './CmmsMaestros';
+import { loadCodes } from '../data/cmmsStore';
 import {
   WorkspaceViewSelector,
   WorkspaceWeekView,

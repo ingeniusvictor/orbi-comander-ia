@@ -17,6 +17,25 @@
   --color-slate-600: oklch(58% 0.04 257);
 }
 
+/* 17A UX P2: tokens de estado. Se usan como bg-ok, text-danger, border-warn/30, etc.
+   "inline" hace que sigan al Modo sol (que redefine los tonos base dentro de .tema-sol).
+   Regla: un solo acento de marca (esmeralda); el error es siempre rose (no red). */
+@theme inline {
+  --color-accent: var(--color-emerald-400);
+  --color-accent-strong: var(--color-emerald-500);
+  --color-ok: var(--color-emerald-400);
+  --color-warn: var(--color-amber-400);
+  --color-danger: var(--color-rose-400);
+  --color-info: var(--color-sky-400);
+  --color-surface: var(--color-slate-900);
+  --color-surface-raised: var(--color-slate-850);
+  --color-line: var(--color-slate-800);
+  --color-ink: var(--color-white);
+  --color-ink-muted: var(--color-slate-400);
+  --radius-control: 0.625rem;
+  --radius-card: 1rem;
+}
+
 @layer base {
   h1, h2 {
     font-family: var(--font-display);

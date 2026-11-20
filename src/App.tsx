@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Layers,
   Users,
@@ -83,7 +83,6 @@ import {
 import { STORAGE_ERROR_EVENT } from './data/storage';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
-import CmmsMaestros from './components/CmmsMaestros';
 import {
   getSession, logout, bootstrapCollections, pollCollections, fetchOTs, fetchAudit, postAudit, initOutbox, processOutbox,
   queueOTChanges, hasPendingOT, setServerOTListener, clearLocalMirrorAndReload, ApiError, SYNC_EVENTS, type SessionInfo,
@@ -92,28 +91,62 @@ import {
 } from './data/serverSync';
 import { warmPreviews, replacePlaceholders } from './data/photoQueue';
 
-// Importar Vistas Operacionales
-import HomeEjecutivo from './components/HomeEjecutivo';
-import Organigrama from './components/Organigrama';
-import Zonas from './components/Zonas';
-import MatrizPlantas from './components/MatrizPlantas';
-import OTManager from './components/OTManager';
-import VistaTerreno from './components/VistaTerreno';
-import HSECalidad from './components/HSECalidad';
-import Workspace from './components/Workspace';
-import InsightCenter from './components/InsightCenter';
+// 17A UX P2: cada módulo se descarga cuando se abre (el técnico ya no baja los 22 módulos al entrar)
+const HomeEjecutivo = lazy(() => import('./components/HomeEjecutivo'));
+const Organigrama = lazy(() => import('./components/Organigrama'));
+const Zonas = lazy(() => import('./components/Zonas'));
+const MatrizPlantas = lazy(() => import('./components/MatrizPlantas'));
+const OTManager = lazy(() => import('./components/OTManager'));
+const VistaTerreno = lazy(() => import('./components/VistaTerreno'));
+const HSECalidad = lazy(() => import('./components/HSECalidad'));
+const Workspace = lazy(() => import('./components/Workspace'));
+const InsightCenter = lazy(() => import('./components/InsightCenter'));
+const OrbiFleetStandaloneShell = lazy(() => import('./features/fleet/app/OrbiFleetStandaloneShell'));
+const PeopleResource = lazy(() => import('./components/PeopleResource'));
+const RepuestosHerramientas = lazy(() => import('./components/RepuestosHerramientas'));
+const EscalationCenter = lazy(() => import('./components/EscalationCenter'));
+const AuditLog = lazy(() => import('./components/AuditLog'));
+const FotonPrime = lazy(() => import('./components/FotonPrime'));
+const PTWCenter = lazy(() => import('./components/PTWCenter'));
+const DemoReadiness = lazy(() => import('./components/DemoReadiness'));
+const ExecutiveDemoHub = lazy(() => import('./components/ExecutiveDemoHub'));
+const CmmsMaestros = lazy(() => import('./components/CmmsMaestros'));
 
-// Nuevas Vistas del Parche v0.1.1C
-import FlotaLogistica from './components/FlotaLogistica';
-import OrbiFleetStandaloneShell from './features/fleet/app/OrbiFleetStandaloneShell';
-import PeopleResource from './components/PeopleResource';
-import RepuestosHerramientas from './components/RepuestosHerramientas';
-import EscalationCenter from './components/EscalationCenter';
-import AuditLog from './components/AuditLog';
-import FotonPrime from './components/FotonPrime';
-import PTWCenter from './components/PTWCenter';
-import DemoReadiness from './components/DemoReadiness';
-import ExecutiveDemoHub from './components/ExecutiveDemoHub';
+/**
+ * Descarga anticipada en segundo plano (cuando el teléfono está libre): así los módulos quedan
+ * guardados por el service worker y se pueden abrir después sin señal.
+ */
+function prefetchModules(role: string) {
+  const loaders: (() => Promise<unknown>)[] = role === 'TECNICO_OM'
+    ? [() => import('./components/VistaTerreno')]
+    : [
+        () => import('./components/VistaTerreno'), () => import('./components/OTManager'), () => import('./components/Workspace'),
+        () => import('./components/CmmsMaestros'), () => import('./components/HomeEjecutivo'), () => import('./components/InsightCenter'),
+        () => import('./components/PTWCenter'), () => import('./components/HSECalidad'), () => import('./components/EscalationCenter'),
+      ];
+  const run = () => loaders.forEach(load => { load().catch(() => { /* sin señal: se intentará al abrirlo */ }); });
+  const idle = (window as unknown as { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback;
+  if (idle) idle(run); else setTimeout(run, 2000);
+}
+
+/** Reloj de la cabecera con su propio estado: antes re-dibujaba toda la app cada segundo. */
+function Reloj() {
+  const [ahora, setAhora] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setAhora(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return <span>{ahora.toLocaleString('es-CL', { hour12: false, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>;
+}
+
+function CargandoModulo() {
+  return (
+    <div role="status" className="flex items-center justify-center gap-2 py-24 text-sm text-slate-400">
+      <span className="h-4 w-4 rounded-full border-2 border-slate-600 border-t-emerald-400 animate-spin" aria-hidden="true" />
+      Cargando…
+    </div>
+  );
+}
 
 export default function App() {
   // Bases de datos reactivas
@@ -151,7 +184,6 @@ export default function App() {
   }, [isSidebarOpen]);
 
   // Hora del sistema (Estática de la telemetría O&M o dinámica)
-  const [systemTime, setSystemTime] = useState<string>('');
 
   // 17A: fallas de almacenamiento visibles para el usuario
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -192,6 +224,9 @@ export default function App() {
     initCollectionSync();
     loadLocalCollections();
     setOts(cachedOTs());
+    // Misma vista de inicio que con señal (el técnico va directo a Vista Terreno)
+    const suggested = ROLES_CONFIG[info.user.role]?.suggestedView;
+    if (suggested) setActiveView(suggested);
     void warmPreviews().then(refreshQueuedPhotoCount);
     setIsOffline(true);
     setAuthState('ready');
@@ -238,10 +273,28 @@ export default function App() {
     }
   };
 
-  // Copia de trabajo de las OTs en el equipo, para poder abrir la app sin señal
+  // Copia de trabajo de las OTs en el equipo, para poder abrir la app sin señal.
+  // 17A UX P2: se guarda 800 ms después del último cambio (antes, en cada cambio, bloqueando el teléfono)
+  // y de inmediato si la app pasa a segundo plano o se cierra.
+  const otsParaCache = useRef<OT[]>([]);
   useEffect(() => {
-    if (authState === 'ready') cacheOTs(ots);
+    if (authState !== 'ready') return;
+    otsParaCache.current = ots;
+    const t = setTimeout(() => cacheOTs(ots), 800);
+    return () => clearTimeout(t);
   }, [ots, authState]);
+  useEffect(() => {
+    if (authState !== 'ready') return;
+    const flush = () => cacheOTs(otsParaCache.current);
+    const onHidden = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onHidden);
+    prefetchModules(userRole);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onHidden);
+    };
+  }, [authState]);
 
   useEffect(() => {
     const goOffline = () => setIsOffline(true);
@@ -271,11 +324,7 @@ export default function App() {
     void startSession();
 
     // Hora de sistema formateada
-    const updateTime = () => setSystemTime(new Date().toLocaleString('es-CL', { hour12: false }));
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
     return () => {
-      clearInterval(interval);
       window.removeEventListener(SYNC_EVENTS.AUTH_REQUIRED, onAuth);
       window.removeEventListener(SYNC_EVENTS.PENDING_CHANGED, onPending);
       window.removeEventListener(SYNC_EVENTS.COLLECTIONS_UPDATED, onCollections);
@@ -308,7 +357,9 @@ export default function App() {
           });
           // OTs creadas en este equipo que aún no llegan al servidor
           const localOnly = prev.filter(p => !serverCodes.has(p.codigo) && hasPendingOT(p.codigo));
-          return [...merged, ...localOnly];
+          const next = [...merged, ...localOnly];
+          // Si nada cambió, se conserva la misma lista (evita re-dibujar y re-guardar cada 20 s)
+          return next.length === prev.length && next.every((o, i) => o === prev[i]) ? prev : next;
         });
         await pollCollections();
       } catch (error) {
@@ -341,7 +392,7 @@ export default function App() {
     window.location.reload();
   };
 
-  // Helper para registro inmutable en ORBI Audit Log
+  // Helper para registro inmutable en Registro de Auditoría
   const addAuditLogEvent = (
     accion: string,
     modulo: string,
@@ -436,7 +487,7 @@ export default function App() {
     {
       title: 'Mando O&M',
       items: [
-        { id: 'Home', label: 'Home Jefatura O&M', icon: Cpu },
+        { id: 'Home', label: 'Inicio Jefatura O&M', icon: Cpu },
         { id: 'OTs', label: 'ORBI OT Center', icon: FileText },
         { id: 'Maestros', label: 'Activos y Preventivos', icon: Wrench },
         { id: 'Workspace', label: 'ORBI Workspace', icon: Calendar },
@@ -444,7 +495,7 @@ export default function App() {
       ]
     },
     {
-      title: 'Ejecución & Terreno',
+      title: 'Ejecución y Terreno',
       items: [
         { id: 'Terreno', label: 'Vista Terreno', icon: Smartphone },
         { id: 'Organigrama', label: 'Organigrama O&M', icon: Users },
@@ -453,19 +504,19 @@ export default function App() {
       ]
     },
     {
-      title: 'Logística & Bodega',
+      title: 'Logística y Bodega',
       items: [
-        { id: 'Flota', label: 'Control de Flota & Logística', icon: Truck },
-        { id: 'Repuestos', label: 'Repuestos & Herramientas', icon: Wrench },
-        { id: 'People', label: 'People & Resource Center', icon: Briefcase },
+        { id: 'Flota', label: 'Flota y Logística', icon: Truck },
+        { id: 'Repuestos', label: 'Repuestos y Herramientas', icon: Wrench },
+        { id: 'People', label: 'Personas y Carga de Trabajo', icon: Briefcase },
       ]
     },
     {
-      title: 'Gobernanza & Seguridad',
+      title: 'Gobernanza y Seguridad',
       items: [
-        { id: 'Escalaciones', label: 'Risk & Escalation Center', icon: AlertTriangle },
-        { id: 'HSE', label: 'HSE & Quality Bridge', icon: ShieldAlert },
-        { id: 'AuditLog', label: 'ORBI Audit Log', icon: ClipboardList },
+        { id: 'Escalaciones', label: 'Riesgos y Escalamientos', icon: AlertTriangle },
+        { id: 'HSE', label: 'HSE y Calidad', icon: ShieldAlert },
+        { id: 'AuditLog', label: 'Registro de Auditoría', icon: ClipboardList },
         { id: 'Gobernanza', label: 'Gobernanza ORBI', icon: Award },
       ]
     },
@@ -473,8 +524,8 @@ export default function App() {
       title: 'Análisis O&M',
       items: [
         { id: 'FotonPrime', label: 'FOTON PRIME O&M IA', icon: Brain },
-        { id: 'DemoHub', label: 'ORBI Executive Demo Hub', icon: Award },
-        { id: 'DemoReadiness', label: 'Release & Demo Center', icon: Cpu },
+        { id: 'DemoHub', label: 'Presentación Ejecutiva', icon: Award },
+        { id: 'DemoReadiness', label: 'Preparación de Demo', icon: Cpu },
         { id: 'Configuracion', label: 'Configuración', icon: Settings },
       ]
     }
@@ -524,7 +575,7 @@ export default function App() {
           {/* Hora del Sistema */}
           <div className="hidden md:flex items-center gap-1.5 text-xs font-mono text-slate-500 bg-slate-950/40 border border-slate-900 px-3 py-1.5 rounded-lg">
             <Clock className="h-3.5 w-3.5 text-slate-500" />
-            <span>{systemTime || 'Telemetría Sincronizada'}</span>
+            <Reloj />
           </div>
 
           {/* Selector de Roles Integrado */}
@@ -576,7 +627,7 @@ export default function App() {
       )}
       {storageError && (
         <div role="alert" className="bg-rose-600 text-white text-xs font-bold px-4 py-2 flex items-center justify-between gap-3">
-          <span>⚠ {storageError}</span>
+          <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />{storageError}</span>
           <button onClick={() => setStorageError(null)} className="underline shrink-0">Cerrar</button>
         </div>
       )}
@@ -656,6 +707,7 @@ export default function App() {
         {/* AREA DE CONTENIDO PRINCIPAL */}
         <main className={`flex-1 ${activeView === 'Terreno' ? 'p-0' : 'p-3'} sm:p-6 overflow-y-auto max-w-[1600px] mx-auto w-full`}>
           <ErrorBoundary modulo={activeView} resetKey={activeView}>
+          <Suspense fallback={<CargandoModulo />}>
           {activeView === 'Home' && (
             <HomeEjecutivo
               plantas={plantas}
@@ -955,6 +1007,7 @@ export default function App() {
               </div>
             </div>
           )}
+          </Suspense>
           </ErrorBoundary>
         </main>
       </div>
