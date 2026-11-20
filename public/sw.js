@@ -33,10 +33,16 @@ async function referencedAssets(html, cache) {
   const found = new Set((html.match(ASSET_RE) || []).map((a) => '/' + a));
   const leible = (a) => a.endsWith('.js') || a.endsWith('.css');
   const queue = [...found].filter(leible);
+  const enPagina = new Set(found);
   while (queue.length) {
     const path = queue.shift();
     let res = await cache.match(path);
-    if (!res) res = await fetch(path).catch(() => null);
+    // Solo se descargan los archivos que nombra la página (la app los necesita de todos modos);
+    // lo que no está guardado no hace falta revisarlo: así no se baja la app completa en cada visita.
+    if (!res && enPagina.has(path)) {
+      res = await fetch(path).catch(() => null);
+      if (res && res.ok) await cache.put(path, res.clone());
+    }
     if (!res || !res.ok) continue;
     for (const a of (await res.text()).match(ASSET_RE) || []) {
       const ref = '/' + a;

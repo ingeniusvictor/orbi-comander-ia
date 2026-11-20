@@ -1,6 +1,6 @@
 {
-  "name": "ORBI O&M Command Center",
-  "short_name": "ORBI O&M",
+  "name": "ORBI O&M Work Center",
+  "short_name": "ORBI Work Center",
   "description": "Órdenes de trabajo de mantenimiento para plantas fotovoltaicas.",
   "start_url": "/",
   "display": "standalone",

@@ -286,3 +286,65 @@ test('Aislamiento: el técnico no ve ni modifica OTs de otros', async () => {
   assert.equal(await tecnico.ot(ajena.codigo), undefined);
   assert.equal((await tecnico.patch(ajena, { observaciones: 'x' })).status, 404);
 });
+
+// ---------------- 17B: correctivo de seguimiento desde un hallazgo ----------------
+
+test('17B: el técnico crea un correctivo de seguimiento desde un hallazgo y queda vinculado', async () => {
+  const { buildFollowUpOT, newFollowUpCode } = await import('../src/domain/seguimiento');
+  const origen = (await tecnico.get('/ots')).ots.find((o: OT) => o.codigo === '26-29221') as OT;
+  assert.ok(origen, 'OT de origen asignada al técnico');
+  const foto = await tecnico.photo(origen.codigo);
+
+  // El cliente intenta cambiar planta y responsable: el servidor los toma de la OT de origen
+  const borrador = buildFollowUpOT(origen, {
+    descripcion: 'Conector MC4 quemado en string 4 del INV-07; reemplazar', prioridad: 'Alta',
+    item: 'Revisión de conectores', fotos: [{ fileId: foto.id, url: foto.url }],
+  }, newFollowUpCode(), 'Otro Nombre', '2026-11-20');
+  const creada = await tecnico.send('/ots', 'POST', { ot: { ...borrador, plantaId: 'ORBI-PV-999', responsable: 'Víctor León', estado: 'Cerrada' } });
+  assert.equal(creada.status, 201, creada.body?.error);
+  const seg = creada.body.ot as OT;
+  assert.equal(seg.tipo, 'Correctiva');
+  assert.equal(seg.estado, 'Nueva');
+  assert.equal(seg.otOrigen, origen.codigo);
+  assert.equal(seg.plantaId, origen.plantaId);
+  assert.equal(seg.responsable, '');
+  assert.equal(seg.reportadoPor, 'Víctor León');
+  assert.equal(seg.hallazgoOrigen?.fotos[0].fileId, foto.id);
+
+  // La OT de origen registra el vínculo (lo escribe el servidor)
+  const origenDespues = await tecnico.ot(origen.codigo);
+  assert.ok(origenDespues.otsSeguimiento?.includes(seg.codigo));
+  assert.ok(origenDespues.historialCambios?.some(h => h.accion === 'Correctivo de seguimiento'));
+
+  // El técnico ve el correctivo que reportó, pero no puede modificarlo
+  const visto = await tecnico.ot(seg.codigo);
+  assert.ok(visto, 'el técnico ve su reporte');
+  assert.equal((await tecnico.patch(visto, { observaciones: 'x' })).status, 403);
+  // Y no puede borrar el vínculo desde la OT de origen
+  const intento = await tecnico.patch(origenDespues, { otsSeguimiento: [] } as Partial<OT>);
+  assert.equal(intento.status, 200);
+  assert.ok((await tecnico.ot(origen.codigo)).otsSeguimiento?.includes(seg.codigo));
+
+  // Coordinación lo ve y puede asignarlo
+  const paraCoord = await coordinador.ot(seg.codigo);
+  ok(await coordinador.patch(paraCoord, { responsable: 'Víctor León' }), 'asignar correctivo');
+});
+
+test('17B: reglas del correctivo de seguimiento', async () => {
+  const { buildFollowUpOT, newFollowUpCode } = await import('../src/domain/seguimiento');
+  const origen = await tecnico.ot('26-29221');
+  // Foto de otra OT: rechazada
+  const ajena = (await jefe.get('/ots')).ots.find((o: OT) => o.codigo !== origen.codigo && /v[ií]ctor le[oó]n/i.test(`${o.responsable}`)) as OT;
+  const fotoAjena = await tecnico.photo(ajena.codigo);
+  const conFotoAjena = buildFollowUpOT(origen, { descripcion: 'Falla en conector', prioridad: 'Media', fotos: [{ fileId: fotoAjena.id, url: fotoAjena.url }] }, newFollowUpCode(), 'x', '2026-11-20');
+  assert.equal((await tecnico.send('/ots', 'POST', { ot: conFotoAjena })).status, 400);
+  // Descripción vacía: rechazada
+  const sinTexto = buildFollowUpOT(origen, { descripcion: 'ok', prioridad: 'Media' }, newFollowUpCode(), 'x', '2026-11-20');
+  assert.equal((await tecnico.send('/ots', 'POST', { ot: sinTexto })).status, 400);
+  // Desde una OT que no es suya: no la encuentra
+  const otraOrigen = (await jefe.get('/ots')).ots.find((o: OT) => !/v[ií]ctor le[oó]n/i.test(`${o.responsable} ${o.tecnicoAsignado ?? ''} ${o.reportadoPor ?? ''}`)) as OT;
+  const ajenaSeg = buildFollowUpOT(otraOrigen, { descripcion: 'Falla en conector', prioridad: 'Media' }, newFollowUpCode(), 'x', '2026-11-20');
+  assert.equal((await tecnico.send('/ots', 'POST', { ot: ajenaSeg })).status, 404);
+  // Origen inexistente
+  assert.equal((await tecnico.send('/ots', 'POST', { ot: { ...ajenaSeg, codigo: newFollowUpCode(), otOrigen: 'NO-EXISTE' } })).status, 404);
+});

@@ -232,6 +232,14 @@ export interface OT {
   codigoFalla?: { problema: string; causa: string; accion: string };
   /** 17A Fase 2: horas hombre por técnico; hhReales es la suma de estas líneas cuando existen. */
   laborLines?: { id: string; tecnico: string; fecha: string; horaInicio: string; horaFin: string; horas: number; actividad?: string }[];
+  /** 17B: OT donde se encontró la falla que originó este correctivo (lo valida el servidor). */
+  otOrigen?: string;
+  /** 17B: pregunta del checklist y fotos del hallazgo que originó este correctivo. */
+  hallazgoOrigen?: { item?: string; fotos: { fileId: string; url: string }[] };
+  /** 17B: correctivos de seguimiento creados desde esta OT (los registra el servidor). */
+  otsSeguimiento?: string[];
+  /** 17B: quién reportó el hallazgo (lo fija el servidor con el usuario de la sesión). */
+  reportadoPor?: string;
   plantaId: string;
   plantaNombre: string;
   legacyPlantId?: string;
@@ -264,7 +272,8 @@ export interface OT {
     | 'HSE'
     | 'Calidad'
     | 'Cliente'
-    | 'Preventivo programado';
+    | 'Preventivo programado'
+    | 'Hallazgo en terreno';
   impacto: 'Sin impacto' | 'Bajo' | 'Medio' | 'Alto' | 'Crítico';
   riesgoDisponibilidad: 'No aplica' | 'En observación' | 'Riesgo medio' | 'Riesgo alto' | 'Riesgo crítico';
   historialCambios?: OTHistorial[];

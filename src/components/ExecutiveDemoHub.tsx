@@ -131,7 +131,7 @@ export default function ExecutiveDemoHub({
   };
 
   const handleCopySummary = () => {
-    const text = `ORBI O&M Command Center IA es una suite unificada para la gestión integral de operaciones O&M solares:
+    const text = `ORBI O&M Work Center es una suite unificada para la gestión integral de operaciones O&M solares:
 - ORBI Workspace: Organiza la planificación, asignación de cuadrillas y control de colisiones horarias (el cuándo, dónde y quién).
 - ORBI OT Center: Ejecuta órdenes de trabajo con control estricto de evidencias (Modo Limpieza Inversores), PTW y repuestos de planta (el qué, cómo y cierre).
 - ORBI Insight Center: Consolida los datos en una consola ejecutiva para medir SLAs, rankings de plantas y matriz de horas.
@@ -169,7 +169,7 @@ La actual demo opera en modo sandbox/read-only con persistencia local simulada e
       status: 'STABLE_SHELL',
       statusLabel: 'Stable Platform Shell',
       badge: 'Platform',
-      responsibility: 'Entrada principal del ecosistema ORBI O&M Command Center IA. Consolidación rápida de KPIs de flota, recursos, repuestos y alertas.',
+      responsibility: 'Entrada principal del ecosistema ORBI O&M Work Center. Consolidación rápida de KPIs de flota, recursos, repuestos y alertas.',
       icon: Cpu,
       viewId: 'Home'
     },
@@ -314,7 +314,7 @@ La actual demo opera en modo sandbox/read-only con persistencia local simulada e
           duration: '1.5 min',
           moduleName: 'Home Global',
           viewId: 'Home',
-          objective: 'Explicar el Command Center O&M y simular el switch de identidades para supervisor y técnico.',
+          objective: 'Explicar el ORBI O&M Work Center y simular el switch de identidades para supervisor y técnico.',
           phrase: '«La plataforma se adapta al rol de la persona. El técnico de terreno tiene una vista de celular de carga cero, mientras que la jefatura ve la matriz operacional global.»'
         },
         {
@@ -382,7 +382,7 @@ La actual demo opera en modo sandbox/read-only con persistencia local simulada e
       steps: [
         {
           stepNum: 1,
-          title: 'Visión Holística y Command Center',
+          title: 'Visión general de ORBI O&M Work Center',
           duration: '2.0 min',
           moduleName: 'Home Global',
           viewId: 'Home',
@@ -491,7 +491,7 @@ La actual demo opera en modo sandbox/read-only con persistencia local simulada e
             <Award className="h-6 w-6 text-emerald-400" /> ORBI Executive Demo Hub
           </h2>
           <p className="text-xs text-slate-400 max-w-4xl leading-normal">
-            Centro de presentación, release y recorrido ejecutivo del ecosistema <strong className="text-white">ORBI O&M Command Center IA</strong>. Use esta consola integrada para planificar y conducir demostraciones fluidas de alto impacto para gerentes, directores y clientes de O&M.
+            Centro de presentación, release y recorrido ejecutivo del ecosistema <strong className="text-white">ORBI O&M Work Center</strong>. Use esta consola integrada para planificar y conducir demostraciones fluidas de alto impacto para gerentes, directores y clientes de O&M.
           </p>
         </div>
 
@@ -540,7 +540,7 @@ La actual demo opera en modo sandbox/read-only con persistencia local simulada e
             1. Estado General de Madurez del Ecosistema
           </h3>
           <p className="text-[11px] text-slate-500">
-            Nivel de finalización, responsabilidades y alcances de cada componente en la suite ORBI O&M Command Center IA.
+            Nivel de finalización, responsabilidades y alcances de cada componente en la suite ORBI O&M Work Center.
           </p>
         </div>
 
@@ -888,7 +888,7 @@ La actual demo opera en modo sandbox/read-only con persistencia local simulada e
           </div>
           <button
             onClick={() => {
-              const scriptText = `Inicio: "ORBI O&M Command Center IA centraliza planificación, ejecución, cierre documental, análisis y reportería ejecutiva en una sola plataforma."
+              const scriptText = `Inicio: "ORBI O&M Work Center centraliza planificación, ejecución, cierre documental, análisis y reportería ejecutiva en una sola plataforma."
 OT Center: "Este módulo permite gestionar la trazabilidad de la orden de trabajo, evidencias, permisos, repuestos y cierre documental."
 Workspace: "Workspace organiza cuándo se ejecuta cada actividad, quién la realiza y qué bloqueos pueden afectar el despacho."
 ORBI Insight Center: "Insight Center convierte la operación en indicadores ejecutivos, estado por cliente, HH, ranking de plantas e insights accionables."
@@ -910,7 +910,7 @@ Roadmap: "Los próximos módulos extraídos desde Corporate Assistant completar�
           <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-900 space-y-1.5">
             <span className="text-[9px] font-mono text-slate-500 uppercase font-black block">01. BIENVENIDA & PROPÓSITO</span>
             <p className="text-slate-300 leading-relaxed italic">
-              «ORBI O&amp;M Command Center IA centraliza la planificación, ejecución, cierre documental, análisis y reportería ejecutiva en una sola plataforma unificada.»
+              «ORBI O&amp;M Work Center centraliza la planificación, ejecución, cierre documental, análisis y reportería ejecutiva en una sola plataforma unificada.»
             </p>
           </div>
 

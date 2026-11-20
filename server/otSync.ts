@@ -12,6 +12,7 @@
 import type { OT, OTEstado, RoleType } from '../src/types';
 import { transitionOT, softwrenchCodeOf } from '../src/domain/otStateMachine';
 import { validateLaborLine, totalLaborHours, type LaborLine } from '../src/domain/cmms';
+import { buildFollowUpOT, canCreateFollowUpFrom, validateFollowUpInput } from '../src/domain/seguimiento';
 
 export interface StoredOT {
   ot: OT;
@@ -36,7 +37,9 @@ export type PatchResult =
   | { ok: false; status: number; error: string };
 
 /** Campos que nunca escribe el cliente directamente. */
-const SERVER_OWNED = new Set(['codigo', 'estado', 'lifecycleHistory', '_version']);
+const SERVER_OWNED = new Set(['codigo', 'estado', 'lifecycleHistory', '_version',
+  // 17B: el vínculo con la OT de origen se fija al crear el correctivo y no se edita después
+  'otOrigen', 'hallazgoOrigen', 'otsSeguimiento', 'reportadoPor']);
 
 /** Campos que un técnico SÍ puede modificar (lista blanca: todo lo demás se rechaza). */
 const TECH_EDITABLE = new Set([
@@ -98,8 +101,15 @@ export function isAssignedTo(ot: OT, displayName: string): boolean {
 }
 
 export function canReadOT(ot: OT, actor: Actor): boolean {
-  if (actor.role === 'TECNICO_OM') return isAssignedTo(ot, actor.displayName);
+  // 17B: el técnico también ve los correctivos que él reportó (para seguir su estado)
+  if (actor.role === 'TECNICO_OM') return isAssignedTo(ot, actor.displayName) || normalizeName(ot.reportadoPor) === normalizeName(actor.displayName);
   return true;
+}
+
+/** Modificar una OT: el técnico solo las asignadas a él (ver no basta). */
+export function canWriteOT(ot: OT, actor: Actor): boolean {
+  if (actor.role === 'TECNICO_OM') return isAssignedTo(ot, actor.displayName);
+  return !READ_ONLY_ROLES.includes(actor.role);
 }
 
 function sameValue(a: unknown, b: unknown): boolean {
@@ -347,4 +357,64 @@ export function prepareNewOT(input: OT, actor: Actor, now?: Date): { ok: true; o
       historialCambios: [{ fecha, usuario: actor.displayName, accion: 'Creación', detalle: `OT creada en estado ${input.estado}` }],
     },
   };
+}
+
+/**
+ * 17B: correctivo de seguimiento creado desde un hallazgo en otra OT.
+ * Lo puede crear quien puede modificar la OT de origen (el técnico, si está asignado a ella).
+ * Del cliente solo se aceptan el código, la descripción, la prioridad, la pregunta y las fotos;
+ * planta, activo y responsables se copian de la OT de origen.
+ */
+export function prepareFollowUpOT(
+  input: OT,
+  origin: OT | null,
+  actor: Actor,
+  fileBelongsToOrigin: (fileId: string) => boolean,
+  hoy: string,
+  now?: Date,
+): { ok: true; ot: OT } | { ok: false; status: number; error: string } {
+  if (!origin || !canReadOT(origin, actor)) return { ok: false, status: 404, error: 'La OT de origen no existe.' };
+  if (!canWriteOT(origin, actor)) return { ok: false, status: 403, error: 'Solo quien trabaja en la OT de origen puede reportar un hallazgo en ella.' };
+  if (!canCreateFollowUpFrom(origin)) return { ok: false, status: 422, error: 'La OT de origen está cerrada o cancelada.' };
+  if (!input || typeof input.codigo !== 'string' || !/^[A-Za-z0-9._-]{3,40}$/.test(input.codigo)) {
+    return { ok: false, status: 400, error: 'Código de OT inválido.' };
+  }
+  const datos = {
+    descripcion: input.diagnosticoInicial ?? '',
+    prioridad: input.prioridad,
+    item: input.hallazgoOrigen?.item,
+    fotos: input.hallazgoOrigen?.fotos ?? [],
+  };
+  const invalido = validateFollowUpInput(datos);
+  if (invalido) return { ok: false, status: 400, error: invalido };
+  if (datos.fotos.some(f => !fileBelongsToOrigin(f.fileId))) {
+    return { ok: false, status: 400, error: 'Las fotos del hallazgo deben ser de la OT de origen.' };
+  }
+  const fotos = datos.fotos.map(f => ({ fileId: f.fileId, url: `/api/files/${encodeURIComponent(f.fileId)}` }));
+  const ot = buildFollowUpOT(origin, { ...datos, fotos }, input.codigo, actor.displayName, hoy);
+  const fecha = nowIso(now);
+  return {
+    ok: true,
+    ot: {
+      ...ot,
+      approvals: [],
+      evidencePack: [],
+      lifecycleHistory: [{ estadoNuevo: ot.estado, fecha, usuario: actor.displayName, comentario: `Correctivo de seguimiento de la OT ${origin.codigo}` }],
+      historialCambios: [{ fecha, usuario: actor.displayName, accion: 'Creación', detalle: `Correctivo creado desde un hallazgo en la OT ${origin.codigo}` }],
+    },
+  };
+}
+
+/** 17B: deja registrado en la OT de origen el correctivo que nació de ella. */
+export function linkFollowUp(origin: StoredOT, codigo: string, actor: Actor, now?: Date): StoredOT {
+  const version = origin.version + 1;
+  const ot: OT = {
+    ...origin.ot,
+    otsSeguimiento: [...new Set([...(origin.ot.otsSeguimiento ?? []), codigo])],
+    historialCambios: [
+      ...(origin.ot.historialCambios ?? []),
+      { fecha: nowIso(now), usuario: actor.displayName, accion: 'Correctivo de seguimiento', detalle: `Se creó el correctivo ${codigo} por un hallazgo en esta OT` },
+    ],
+  };
+  return { ot, version, fieldVersions: { ...origin.fieldVersions, otsSeguimiento: version, historialCambios: version } };
 }

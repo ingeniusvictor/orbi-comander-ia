@@ -1084,7 +1084,7 @@ MÉTRICAS PRINCIPALES:
             <div className="h-0.5 bg-slate-800 w-36 mx-auto print:bg-slate-300"></div>
             <div>
               <p className="font-bold text-white print:text-slate-950">Gerencia de Operaciones O&amp;M</p>
-              <p className="text-[10px] text-slate-400 print:text-slate-500 font-mono">ORBI O&amp;M Command Center</p>
+              <p className="text-[10px] text-slate-400 print:text-slate-500 font-mono">ORBI O&amp;M Work Center</p>
               <p className="text-[9px] text-emerald-400 print:text-emerald-600 font-mono mt-1">✓ Validado en Report Center</p>
             </div>
           </div>

@@ -46,7 +46,7 @@ export default function LoginScreen({ mode, onDone }: Props) {
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <form onSubmit={submit} className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
         <div>
-          <div className="text-[10px] font-mono font-bold text-emerald-400 uppercase">ORBI O&amp;M Command Center</div>
+          <div className="text-[10px] font-mono font-bold text-emerald-400 uppercase">ORBI O&amp;M Work Center</div>
           <h1 className="text-lg font-bold text-white mt-1">
             {mode === 'login' ? 'Iniciar sesión' : 'Cambia tu contraseña'}
           </h1>

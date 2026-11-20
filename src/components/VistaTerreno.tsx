@@ -43,6 +43,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import Button, { buttonClass } from './ui/Button';
+import HallazgoSeguimiento from './HallazgoSeguimiento';
 import { OT, Planta, OTEstado, OTEvidencia, OTEvidencePackItem, Escalation, Repuesto, Herramienta, OMInventoryItem, OMInventoryMovement } from '../types';
 import { transitionOT } from '../domain/otStateMachine';
 import { uploadPhoto } from '../data/serverSync';
@@ -1888,7 +1889,7 @@ export default function VistaTerreno({
                                 const codigo = m ? m[1] : '';
                                 const pregunta = m ? m[2] : item.item;
                                 const toggle = (activo: boolean, colores: string) =>
-                                  `min-h-11 px-2 rounded-lg text-sm font-semibold border transition-colors ${activo ? colores : 'bg-slate-900 text-slate-300 border-slate-700'}`;
+                                  `min-h-11 px-2 inline-flex items-center justify-center gap-1 rounded-lg text-sm font-semibold border transition-colors ${activo ? colores : 'bg-slate-900 text-slate-300 border-slate-700'}`;
                                 return (
                                 <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2.5">
                                   <div>
@@ -1970,6 +1971,18 @@ export default function VistaTerreno({
                                     onChange={(e) => handleUpdateChecklistObs(idx, e.target.value)}
                                     className="w-full min-h-11 bg-slate-900 border border-slate-700 rounded-lg px-3 text-sm text-white outline-none"
                                   />
+                                  {/* 17B: correctivo de seguimiento desde el hallazgo */}
+                                  {item.hallazgo && (
+                                    <HallazgoSeguimiento
+                                      origin={selectedOt}
+                                      pregunta={item.item}
+                                      observacion={item.observacion}
+                                      fotos={item.fotos}
+                                      ots={ots}
+                                      userName={activeUserName}
+                                      onCreate={(nueva) => onUpdateOts([...otsLatestRef.current, nueva])}
+                                    />
+                                  )}
                                 </div>
                                 );
                               })}
@@ -2142,6 +2155,7 @@ export default function VistaTerreno({
                             {/* 17A Fase 2: horas por técnico, codificación de falla y motivo de espera */}
                             <OTMaintenanceFields
                               ot={selectedOt}
+                              ots={ots}
                               userName={activeUserName}
                               canEditPlanning={false}
                               compact

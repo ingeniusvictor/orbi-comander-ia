@@ -157,7 +157,7 @@ export default function Workspace({
 
   // Rule of synchronization: 
   // OTs with fechaInicio serve as scheduled activities, OTs with empty/invalid dates go into "Pendientes de Programación"
-  // Borrador status is excluded from both calendar (scheduled) and Pending List per ORBI O&M Command Center specs.
+  // Borrador status is excluded from both calendar (scheduled) and Pending List per ORBI O&M Work Center specs.
   const scheduledOts = ots.filter((o) => o.estado !== 'Borrador' && o.fechaInicio && o.fechaInicio !== '');
   const pendingOts = ots.filter((o) => o.estado !== 'Borrador' && (!o.fechaInicio || o.fechaInicio === ''));
 
@@ -2285,7 +2285,7 @@ export default function Workspace({
             {/* Footer */}
             <div className="bg-slate-950 px-6 py-4 border-t border-slate-850 flex items-center justify-between">
               <div className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5">
-                <Info className="h-4 w-4" /> Sincronización ininterrumpida con ORBI O&M Command Center
+                <Info className="h-4 w-4" /> Sincronización ininterrumpida con ORBI O&M Work Center
               </div>
               <button
                 onClick={() => {

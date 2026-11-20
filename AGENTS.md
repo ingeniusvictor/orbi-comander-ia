@@ -2,6 +2,8 @@
 
 This file contains custom instructions, architecture guidelines, and the version registry for **ORBI OT Center**. The platform automatically loads these instructions to maintain operational stability and prevent functional regressions in subsequent development sessions.
 
+> **Nombre del producto (desde 2026-11-20): ORBI O&M Work Center.** Reemplaza a "ORBI O&M Command Center IA" en todo texto visible (cabecera, inicio de sesión, título, app instalable, documentos). "ORBI OT Center", "ORBI Workspace" e "ORBI Insight Center" siguen siendo los nombres de sus módulos. El nombre de la carpeta y del repositorio (`orbi-comander-ia`) no cambia. Comparación con SoftWrench y siguiente fase propuesta: `docs/COMPARATIVA_SOFTWRENCH.md`.
+
 ---
 
 ## 1. VERSION REGISTRY
@@ -507,6 +509,18 @@ Before approving any subsequent build or turn, verify the following 12 test path
     - **Regla para agentes:** botones nuevos con `Button`/`buttonClass` y colores de estado con los tokens (`text-danger`, `bg-ok/15`…), no con tonos sueltos; sin emojis en la interfaz; textos visibles en español.
     - **Regla para agentes:** los módulos de `App.tsx` se importan con `lazy()`; no volver a importarlos de forma directa. El service worker (`public/sw.js`) conserva los archivos que la versión vigente usa en cadena; si se cambia, mantener la prueba 8 de `tests/e2e/piloto.spec.ts` (abrir sin señal).
 - **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.
+
+### MÓDULO 17B — FUNCIONES DE SOFTWRENCH QUE FALTAN (EN DESARROLLO)
+- **Status:** `ABIERTO / AUTORIZADO 2026-11-20 / RAMA feat/piloto-17a`. Base: `docs/COMPARATIVA_SOFTWRENCH.md` (datos reales: 483 correctivos pendientes, 500 OTs ejecutadas sin cerrar, 824 preventivos vencidos en 90 días).
+- **Plan:** 1) correctivo de seguimiento desde el hallazgo; 2) bandeja de aprobación con días de espera y marca "cobrable"; 3) fecha objetivo del contrato y tablero de vencidas; 4) plazos en la cola de cierre y aprobación múltiple; 5) correctivos pendientes al programar una visita.
+- **Punto 1 HECHO — correctivo de seguimiento:**
+  - Dominio `src/domain/seguimiento.ts` (`buildFollowUpOT`, `validateFollowUpInput`, `canCreateFollowUpFrom`, `newFollowUpCode`, `followUpsOf`). Campos nuevos en `OT`: `otOrigen`, `hallazgoOrigen`, `otsSeguimiento`, `reportadoPor`; origen `'Hallazgo en terreno'`.
+  - En Vista Terreno, bajo una pregunta marcada "Hallazgo": "Crear correctivo por este hallazgo" (`src/components/HallazgoSeguimiento.tsx`). Funciona sin señal (usa la cola de creación de OTs).
+  - El servidor (`POST /api/ots` con `otOrigen`, `prepareFollowUpOT` y `linkFollowUp` en `server/otSync.ts`) solo acepta código, descripción, prioridad, pregunta y fotos de la OT de origen; copia planta, activo y responsables del origen; crea la OT "Nueva" (WAPPR) sin técnico y registra el vínculo en el origen en la misma transacción.
+  - El técnico puede crear el correctivo solo desde OTs asignadas a él; ve los correctivos que reportó pero no los modifica (`canWriteOT`). Los campos del vínculo son del servidor (`SERVER_OWNED`).
+  - Ficha de la OT (OT Center y Vista Terreno): muestra la OT de origen y los correctivos creados desde ella (`OTMaintenanceFields`).
+  - Pruebas: `tests/seguimiento.test.ts`, dos pruebas 17B en `tests/e2e-api.test.ts` y paso 9 de `tests/e2e/piloto.spec.ts`.
+- **Regla para agentes:** el vínculo entre OTs lo escribe solo el servidor; no permitir que el cliente fije `otOrigen`, `otsSeguimiento` ni `reportadoPor` por otra vía.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)

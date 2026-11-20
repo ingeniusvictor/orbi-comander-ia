@@ -564,8 +564,8 @@ export default function App() {
               <Zap className="h-5 w-5 text-slate-950 font-bold" />
             </div>
             <div>
-              <span className="text-xs font-mono font-bold tracking-widest text-emerald-400 block leading-none">ORBI ECOSISTEMA</span>
-              <h1 className="text-sm font-black text-white tracking-tight leading-normal">O&M Command Center</h1>
+              <span className="text-xs font-mono font-bold tracking-widest text-emerald-400 block leading-none">ORBI</span>
+              <h1 className="text-sm font-black text-white tracking-tight leading-normal">O&M Work Center</h1>
             </div>
           </div>
         </div>

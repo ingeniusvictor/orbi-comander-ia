@@ -2851,6 +2851,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
               {/* 17A Fase 2: activo, motivo de espera, codificación de falla y horas hombre */}
               <OTMaintenanceFields
                 ot={editingOt}
+                ots={ots}
                 userName={activeUserName}
                 canEditPlanning={['SUPER_ADMIN_ORBI', 'GERENCIA', 'JEFE_OM', 'COORDINADOR_OM', 'PLANIFICACION', 'SUPERVISOR_TERRENO'].includes(userRole)}
                 onChange={(patch) => setEditingOt({ ...editingOt, ...patch })}

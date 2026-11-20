@@ -1203,7 +1203,7 @@ const checkAndMigrateSchema = () => {
             riesgoDisponibilidad: ot.riesgoDisponibilidad === 'Sí' ? 'Riesgo crítico' : ot.riesgoDisponibilidad === 'Parcial' ? 'Riesgo medio' : 'No aplica',
             repuestos: ot.repuestos || [],
             historialCambios: ot.historialCambios || [
-              { fecha: ot.fechaInicio + ' 09:00', usuario: 'Rodolfo Garcés', accion: 'Migración', detalle: 'OT migrada a formato Command Center.' }
+              { fecha: ot.fechaInicio + ' 09:00', usuario: 'Rodolfo Garcés', accion: 'Migración', detalle: 'OT migrada a ORBI O&M Work Center.' }
             ],
             bloqueada: ot.estado === 'En espera de repuesto' || ot.estado === 'En espera de cliente' || ot.bloqueada,
             motivoBloqueo: ot.motivoBloqueo || (ot.estado === 'En espera de repuesto' ? 'Falta de repuesto crítico.' : ot.estado === 'En espera de cliente' ? 'Falta autorización cliente.' : ''),

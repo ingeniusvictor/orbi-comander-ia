@@ -17,10 +17,11 @@ import {
   authenticate, createSession, destroySession, readCookie, sessionCookie, SESSION_COOKIE, SESSION_MAX_AGE_MS,
   requireAuth, requireCsrfHeader, createLoginLimiter, verifyPasswordAsync, hashPassword, hashToken,
 } from './auth';
-import { applyOTPatch, prepareNewOT, canReadOT, type OTPatchRequest } from './otSync';
+import { applyOTPatch, prepareNewOT, prepareFollowUpOT, linkFollowUp, canReadOT, canWriteOT, type OTPatchRequest } from './otSync';
+import { inTransaction } from './db';
 import { isSharedCollection, canWriteCollection, canReadCollection, violatesAppendOnly, MAX_COLLECTION_BYTES } from './collections';
 import * as repo from './repo';
-import { runPmGeneration } from './pm';
+import { runPmGeneration, todayInOperationZone } from './pm';
 import { STORAGE_KEYS } from '../src/data/storage';
 import type { OT, Escalation } from '../src/types';
 
@@ -119,7 +120,34 @@ export function createApiRouter(db: Db): express.Router {
   });
 
   router.post('/ots', (req, res) => {
-    const prepared = prepareNewOT(req.body?.ot as OT, req.user!);
+    const input = req.body?.ot as OT | undefined;
+    // 17B: correctivo de seguimiento desde un hallazgo (se crea y se vincula a su origen en una sola operación)
+    if (input && typeof input.otOrigen === 'string') {
+      const origin = repo.getOT(db, input.otOrigen);
+      const prep = prepareFollowUpOT(input, origin?.ot ?? null, req.user!, fileId => {
+        const f = repo.getFile(db, fileId);
+        return Boolean(f && f.ot_codigo === input.otOrigen);
+      }, todayInOperationZone());
+      if (prep.ok === false) {
+        res.status(prep.status).json({ error: prep.error });
+        return;
+      }
+      if (repo.getOT(db, prep.ot.codigo)) {
+        res.status(409).json({ error: `Ya existe una OT con código ${prep.ot.codigo}.` });
+        return;
+      }
+      const created = inTransaction(db, () => {
+        const nueva = repo.insertOT(db, prep.ot, req.user!.displayName);
+        const actual = repo.getOT(db, input.otOrigen!)!;
+        if (!repo.saveOT(db, linkFollowUp(actual, prep.ot.codigo, req.user!), actual.version, req.user!.displayName)) {
+          throw new Error('No se pudo vincular el correctivo a su OT de origen.');
+        }
+        return nueva;
+      });
+      res.status(201).json({ ot: withVersion(created) });
+      return;
+    }
+    const prepared = prepareNewOT(input as OT, req.user!);
     if (prepared.ok === false) {
       res.status(prepared.status).json({ error: prepared.error });
       return;
@@ -143,6 +171,10 @@ export function createApiRouter(db: Db): express.Router {
       const stored = repo.getOT(db, req.params.codigo);
       if (!stored || !canReadOT(stored.ot, req.user!)) {
         res.status(404).json({ error: 'OT no encontrada.' });
+        return;
+      }
+      if (req.user!.role === 'TECNICO_OM' && !canWriteOT(stored.ot, req.user!)) {
+        res.status(403).json({ error: 'Solo puedes modificar las OTs asignadas a ti.', ot: withVersion(stored) });
         return;
       }
       const escalaciones = (repo.getCollection(db, STORAGE_KEYS.DB_ESCALAMIENTOS)?.data as Escalation[] | undefined) ?? [];
@@ -241,7 +273,7 @@ export function createApiRouter(db: Db): express.Router {
   // ---------- Fotos ----------
   router.post('/ots/:codigo/files', express.raw({ type: Object.keys(IMAGE_TYPES), limit: MAX_IMAGE_BYTES }), (req, res) => {
     const stored = repo.getOT(db, req.params.codigo);
-    if (!stored || !canReadOT(stored.ot, req.user!) || req.user!.role === 'LECTURA_CLIENTE') {
+    if (!stored || !canReadOT(stored.ot, req.user!) || !canWriteOT(stored.ot, req.user!)) {
       res.status(404).json({ error: 'OT no encontrada.' });
       return;
     }

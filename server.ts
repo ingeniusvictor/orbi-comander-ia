@@ -242,7 +242,7 @@ Consulta del usuario: ${rawPrompt || 'Generar Reporte Gerencial Integrado'}`,
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[ORBI Command Center] Servidor activo en http://localhost:${PORT}`);
+    console.log(`[ORBI Work Center] Servidor activo en http://localhost:${PORT}`);
   });
 }
 

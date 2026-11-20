@@ -1,4 +1,4 @@
-# Guía Ejecutiva de Demostración para Gerencia — ORBI O&M Command Center IA
+# Guía Ejecutiva de Demostración para Gerencia — ORBI O&M Work Center
 
 Esta guía está diseñada para conducir una demostración fluida, segura y de alto impacto de **12 minutos** frente a Gerencia General, Operaciones y Jefatura O&M.
 

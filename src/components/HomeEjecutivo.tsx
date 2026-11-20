@@ -370,7 +370,7 @@ export default function HomeEjecutivo({
             <Layers className="h-5 w-5 text-indigo-400" /> Mapa del Ecosistema ORBI O&amp;M IA
           </h2>
           <p className="text-xs text-slate-400">
-            Navegación unificada y distribución de módulos por dominios operacionales en el Command Center. Haga clic en cualquier módulo para abrirlo directamente.
+            Navegación unificada y distribución de módulos por dominios operacionales en ORBI O&M Work Center. Haga clic en cualquier módulo para abrirlo directamente.
           </p>
         </div>
 
@@ -815,7 +815,7 @@ export default function HomeEjecutivo({
                   <h3 className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
                     FOTON PRIME O&M IA
                   </h3>
-                  <p className="text-[9px] text-slate-500 font-mono">Asistente Ejecutivo del Command Center</p>
+                  <p className="text-[9px] text-slate-500 font-mono">Asistente Ejecutivo de ORBI O&M Work Center</p>
                 </div>
               </div>
             </div>
@@ -963,7 +963,7 @@ export default function HomeEjecutivo({
             Plan de Evolución Tecnológica
           </span>
           <h3 className="text-sm font-bold text-white mt-1.5 flex items-center gap-1.5">
-            <TrendingUp className="h-4 w-4 text-indigo-400" /> Próximos Módulos del Command Center
+            <TrendingUp className="h-4 w-4 text-indigo-400" /> Próximos Módulos de ORBI O&M Work Center
           </h3>
           <p className="text-xs text-slate-400">
             Roadmap del ecosistema de automatización O&amp;M para fases posteriores de implementación real.

@@ -191,3 +191,24 @@ test('8. sin señal desde el inicio: la app y Vista Terreno (cargada aparte) abr
   await expect(tecnico.getByText(OT_PM)).toBeVisible();
   await tecnicoCtx.setOffline(false);
 });
+
+test('9. hallazgo del checklist: el técnico crea un correctivo de seguimiento vinculado (17B)', async () => {
+  await tecnico.goto('/');
+  await tecnico.getByText(OT_PM).click();
+  await tecnico.getByRole('button', { name: 'Checklist', exact: true }).click();
+  // La irradiancia fuera de rango quedó marcada como hallazgo en el paso 3
+  await tecnico.getByRole('button', { name: 'Crear correctivo por este hallazgo' }).first().click();
+  await tecnico.getByLabel('¿Qué falla encontraste y qué hay que hacer?').fill('Piranómetro marca 1550 W/m²; revisar calibración');
+  await tecnico.getByLabel('Prioridad').selectOption('Alta');
+  await tecnico.getByRole('button', { name: 'Crear correctivo', exact: true }).click();
+  await expect(tecnico.getByText(/Correctivo SEG-/).first()).toBeVisible();
+  await shot(tecnico, '07-correctivo-seguimiento');
+
+  await expect.poll(async () => {
+    const res = await tecnico.request.get('/api/ots', { headers: { 'X-ORBI-Request': '1' } });
+    const ots = (await res.json()).ots as any[];
+    const seg = ots.find(o => o.otOrigen === OT_PM);
+    const origen = ots.find(o => o.codigo === OT_PM);
+    return Boolean(seg && seg.tipo === 'Correctiva' && seg.prioridad === 'Alta' && origen?.otsSeguimiento?.includes(seg.codigo));
+  }, { timeout: 15_000 }).toBe(true);
+});

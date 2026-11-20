@@ -10,10 +10,13 @@ import type { OT } from '../types';
 import { localIsoDate, assetPath, hoursBetween, totalLaborHours, validateLaborLine, requiresFailureCode, type LaborLine } from '../domain/cmms';
 import { softwrenchCodeOf } from '../domain/otStateMachine';
 import { loadAssets, loadCodes } from '../data/cmmsStore';
+import { followUpsOf } from '../domain/seguimiento';
 
 import Button from './ui/Button';
 interface Props {
   ot: OT;
+  /** 17B: todas las OTs visibles, para mostrar el estado de los correctivos de seguimiento. */
+  ots?: OT[];
   /** Aplica cambios a la OT (sin cambiar su estado). */
   onChange: (patch: Partial<OT>) => void;
   userName: string;
@@ -24,7 +27,7 @@ interface Props {
 
 const input = 'w-full min-h-11 bg-slate-950 border border-slate-700 rounded-lg px-3 text-sm text-white outline-none focus:border-emerald-500';
 
-export default function OTMaintenanceFields({ ot, onChange, userName, canEditPlanning, compact }: Props) {
+export default function OTMaintenanceFields({ ot, ots = [], onChange, userName, canEditPlanning, compact }: Props) {
   const assets = useMemo(() => loadAssets(), []);
   const codes = useMemo(() => loadCodes(), []);
   const plantAssets = assets.filter(a => a.activo && (a.plantaId === ot.plantaId || a.plantaId === ot.plantaId?.trim()));
@@ -58,6 +61,29 @@ export default function OTMaintenanceFields({ ot, onChange, userName, canEditPla
   return (
     <div className={`bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-3 text-xs ${compact ? '' : 'mt-2'}`}>
       <div className="text-sm font-semibold text-accent">Datos de mantenimiento</div>
+
+      {/* 17B: vínculo con la OT donde se encontró la falla y correctivos que nacieron de esta OT */}
+      {ot.otOrigen && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-sm text-slate-200">
+          Correctivo por un hallazgo en la OT <span className="font-mono">{ot.otOrigen}</span>
+          {ot.hallazgoOrigen?.item ? <> · {ot.hallazgoOrigen.item}</> : null}
+          {ot.reportadoPor ? <span className="text-slate-400"> · reportado por {ot.reportadoPor}</span> : null}
+        </div>
+      )}
+      {followUpsOf(ot, ots).length > 0 && (
+        <div className="space-y-1">
+          <span className="text-slate-400">Correctivos creados desde esta OT</span>
+          {followUpsOf(ot, ots).map(codigo => {
+            const seg = ots.find(o => o.codigo === codigo);
+            return (
+              <div key={codigo} className="flex justify-between text-sm text-slate-200 border-b border-slate-900 py-1">
+                <span className="font-mono">{codigo}</span>
+                <span>{seg ? `${seg.prioridad} · ${seg.estado}` : 'Registrado'}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Activo */}
       <label className="block space-y-1">
