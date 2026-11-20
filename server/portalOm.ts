@@ -72,3 +72,51 @@ export async function alarmasAbiertas(c: ConfigPortal, systemKey: string): Promi
   if (Array.isArray(data)) return data;
   throw new Error(`Formato de alarmas no reconocido para ${systemKey}.`);
 }
+
+// ---------------- 17E: numeración oficial de PT/AST ----------------
+
+async function llamar<T>(c: ConfigPortal, ruta: string, metodo: 'GET' | 'POST', cuerpo?: unknown): Promise<T> {
+  const res = await fetch(`${c.url}${ruta}`, {
+    method: metodo,
+    headers: { Authorization: `Bearer ${await obtenerToken(c)}`, Accept: 'application/json', ...(cuerpo ? { 'Content-Type': 'application/json' } : {}) },
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const detalle = await res.text().catch(() => '');
+    throw Object.assign(new Error(`El portal respondió ${res.status} en ${ruta}${detalle ? `: ${detalle.slice(0, 200)}` : ''}`), { status: res.status });
+  }
+  return res.json() as Promise<T>;
+}
+
+/** Reserva el siguiente correlativo de la planta y el año en el portal. */
+export async function reservarCorrelativo(c: ConfigPortal, acronimo: string, anio: number): Promise<number> {
+  const r = await llamar<{ ultimo: number }>(c, `/api/v1/softwrench-pt-ast/correlativos/${encodeURIComponent(acronimo)}/${anio}/siguiente`, 'POST');
+  if (!Number.isInteger(r.ultimo)) throw new Error('El portal no entregó el número reservado.');
+  return r.ultimo;
+}
+
+/** Devuelve un número reservado que no se usó (solo el último reservado, sin PT registrado). */
+export async function liberarCorrelativo(c: ConfigPortal, acronimo: string, anio: number, correlativo: number): Promise<void> {
+  await llamar(c, `/api/v1/softwrench-pt-ast/correlativos/${encodeURIComponent(acronimo)}/${anio}/liberar`, 'POST', { correlativo });
+}
+
+export interface RegistroPt {
+  codigo_pt: string;
+  acronimo: string;
+  anio: number;
+  correlativo: number;
+  version?: number;
+  tipo_wo: 'PM' | 'CM' | 'OTHER' | 'EC';
+  planta?: string;
+  cliente?: string;
+  tecnico?: string;
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  motivo?: string;
+}
+
+/** Registra el PT generado en la bitácora oficial del portal. */
+export async function registrarPt(c: ConfigPortal, r: RegistroPt): Promise<void> {
+  await llamar(c, '/api/v1/softwrench-pt-ast/log-pt', 'POST', r);
+}

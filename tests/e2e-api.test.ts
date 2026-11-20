@@ -407,3 +407,17 @@ test('17B: cola de cierre — firmas por etapa hechas con firmarEtapa y validada
   assert.deepEqual(ot.approvals!.map(a => `${a.rol}:${a.nombre}`), ['Supervisor:Mauricio Valdés', 'Coordinador:Rodolfo Garcés', 'JefeOM:Felipe Soto']);
   assert.ok(ot.fechaCierre);
 });
+
+test('17E: número de PT desde el servidor (sin portal: numeración local, nunca repetida)', async () => {
+  const otCod = (await supervisor.ot('26-29221')).codigo;
+  const plantaId = (await supervisor.ot('26-29221')).plantaId;
+  const a = await supervisor.send('/ptw/numero', 'POST', { plantaId, otCodigos: [otCod], tecnicos: ['Víctor León'] });
+  const b = await supervisor.send('/ptw/numero', 'POST', { plantaId, otCodigos: [otCod] });
+  assert.equal(a.status, 200, a.body?.error);
+  assert.equal(a.body.fuente, 'local');
+  assert.match(a.body.codigo, /^PT-[A-Z0-9]+-\d{4}-\d{3}$/);
+  assert.equal(b.body.correlativo, a.body.correlativo + 1);
+  assert.equal((await supervisor.send('/ptw/numero', 'POST', { plantaId, otCodigos: [] })).status, 400);
+  const audit = await jefe.get('/audit');
+  assert.ok(audit.events.some((e: { accion: string; comentario: string }) => e.accion === 'Número de PT' && e.comentario.includes(a.body.codigo)));
+});

@@ -301,3 +301,24 @@ test('13. al programar una visita se suma el correctivo pendiente de la planta (
   }, { timeout: 15_000 }).toBe('Programada|true');
   await ctx.close();
 });
+
+test('14. el permiso de trabajo recibe su número del servidor al guardarlo (17E)', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-CL' });
+  const jefe = await ctx.newPage();
+  await login(jefe, E2E_USERS.jefe);
+  await expect(jefe.getByRole('button', { name: 'ORBI OT Center' })).toBeVisible();
+  const ots = (await (await jefe.request.get('/api/ots', { headers: { 'X-ORBI-Request': '1' } })).json()).ots as any[];
+  const plantaId = ots.find(o => o.codigo === OT_PM).plantaId;
+
+  await jefe.getByRole('button', { name: 'ORBI OT Center' }).click();
+  await jefe.getByRole('tab', { name: 'Permisos de trabajo' }).click();
+  await jefe.getByRole('button', { name: 'Crear permiso de trabajo' }).click();
+  await jefe.locator('select').filter({ has: jefe.locator('option', { hasText: '-- Seleccione Planta --' }) }).selectOption(plantaId);
+  await jefe.locator('select').filter({ has: jefe.locator('option', { hasText: '-- Seleccione OT Primaria --' }) }).selectOption(OT_PM);
+  await expect(jefe.getByText('Se asigna al guardar')).toBeVisible();
+  await jefe.getByRole('button', { name: 'Crear permiso y enviar a terreno' }).click();
+  await expect(jefe.getByText(/PT-[A-Z0-9]+-\d{4}-\d{3}/).first()).toBeVisible({ timeout: 10_000 });
+  await jefe.waitForTimeout(700); // fin de la animación de cierre del formulario
+  await shot(jefe, '12-permiso-numerado');
+  await ctx.close();
+});

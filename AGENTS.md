@@ -561,6 +561,13 @@ Before approving any subsequent build or turn, verify the following 12 test path
 - Pantalla: "Por aprobar" muestra el estado de la conexión y la alarma de origen; la ficha de la OT, las alarmas con severidad y hora.
 - Guía: `docs/ALARMAS_VCOM.md`. Ejemplo: `docs/ejemplos/alarmas-ejemplo.json` (datos inventados; no aplicar en la base del piloto). Pruebas: `tests/alarmas.test.ts`.
 - **Pendiente (TI):** registrar ORBI en Entra ID con permiso en la API del portal (producción) y entregar el `systemKey` de cada planta. Confirmar el formato real de las alarmas con la primera respuesta.
+
+### MÓDULO 17E — NUMERACIÓN OFICIAL DE PT/AST (HECHO; OFICIAL AL CONECTAR EL PORTAL)
+- Antes el PTW Center inventaba el número al azar. Ahora `POST /api/ptw/numero` lo entrega al guardar (`server/numeracionPt.ts`, dominio `src/domain/numeracionPt.ts`).
+- Con portal (`ORBI_PORTAL_OM_*` + `ORBI_PT_ACRONIMOS`): reserva en `/correlativos/{acrónimo}/{año}/siguiente`, registra en `/log-pt` y libera el número si el registro falla. Planta sin acrónimo: error (no se inventa).
+- Sin portal: contador del servidor por planta y año (tabla `pt_correlativos`), que sigue al mayor número ya usado. El permiso guarda `numeracion: 'portal' | 'local'`; queda en auditoría. Formato `ORBI_PT_FORMATO` (por defecto `PT-{acronimo}-{anio}-{correlativo}`); AST = código del PT + `-AST`.
+- Obtener número requiere conexión (evita duplicados entre teléfonos sin señal). Guía: `docs/NUMERACION_PT.md`. Pruebas: `tests/numeracionPt.test.ts`, prueba de API 17E y paso 14 de pantalla.
+- **Pendiente (operación/TI):** acrónimo oficial de cada planta y confirmar el formato del código con un PT real.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)

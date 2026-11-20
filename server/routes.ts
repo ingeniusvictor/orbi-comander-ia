@@ -23,6 +23,8 @@ import { isSharedCollection, canWriteCollection, canReadCollection, violatesAppe
 import * as repo from './repo';
 import { runPmGeneration, todayInOperationZone } from './pm';
 import { estadoAlarmas } from './alarmas';
+import { emitirNumeroPt, dependenciasDesdeEntorno, ErrorNumeroPt } from './numeracionPt';
+import { validarSolicitudPt } from '../src/domain/numeracionPt';
 import { STORAGE_KEYS } from '../src/data/storage';
 import type { OT, Escalation } from '../src/types';
 
@@ -243,6 +245,27 @@ export function createApiRouter(db: Db): express.Router {
     const result = runPmGeneration(db, undefined, req.user!.displayName);
     repo.addAudit(db, { userId: req.user!.id, usuario: req.user!.displayName, rol: req.user!.role, accion: 'Generación de preventivos', modulo: 'Planes preventivos', comentario: `${result.creadas.length} OT(s): ${result.creadas.join(', ')}`, criticidad: 'Media' });
     res.json(result);
+  });
+
+  // 17E: número oficial de un permiso de trabajo (portal O&M) o contador local del servidor
+  router.post('/ptw/numero', async (req, res) => {
+    if (req.user!.role === 'LECTURA_CLIENTE') {
+      res.status(403).json({ error: 'Tu rol es de solo lectura.' });
+      return;
+    }
+    const invalido = validarSolicitudPt(req.body);
+    if (invalido) {
+      res.status(400).json({ error: invalido });
+      return;
+    }
+    try {
+      const n = await emitirNumeroPt(db, req.body, req.user!.displayName, dependenciasDesdeEntorno());
+      repo.addAudit(db, { userId: req.user!.id, usuario: req.user!.displayName, rol: req.user!.role, accion: 'Número de PT', modulo: 'Permisos de trabajo', otCodigo: req.body.otCodigos[0], comentario: `${n.codigo} (${n.fuente === 'portal' ? 'numeración oficial' : 'numeración local'})`, criticidad: 'Baja' });
+      res.json(n);
+    } catch (error) {
+      const status = error instanceof ErrorNumeroPt ? error.status : 502;
+      res.status(status).json({ error: (error as Error).message });
+    }
   });
 
   // 17D: estado de la integración de alarmas VCOM (sin datos sensibles)

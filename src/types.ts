@@ -676,6 +676,8 @@ export type PTWEstado =
 export interface PTW {
   id: string; // e.g. PTS-CANT-2026-089
   codigo: string; // Same as id
+  /** 17E: origen del número: oficial del portal O&M o contador local del servidor. */
+  numeracion?: 'portal' | 'local';
   otCodigos: string[]; // Linked OTs
   tecnicos: string[]; // "Víctor León", "Rodrigo Cisterna", "Carrasco"
   plantaId: string;
