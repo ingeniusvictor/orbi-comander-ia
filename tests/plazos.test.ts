@@ -62,3 +62,25 @@ test('el plan preventivo genera la OT con fecha objetivo y margen del contrato',
   assert.equal(generated[0].ot.fechaObjetivoLimite, '2026-12-11');
   assert.ok(validatePlan({ ...plan, toleranciaDias: -1 }, []).some(e => /margen/.test(e)));
 });
+
+// ---------------- 17B punto 5: correctivos pendientes al programar una visita ----------------
+import { correctivosPendientes } from '../src/domain/visitas';
+
+test('correctivos pendientes de la planta: aprobados primero y sumables, los demás con su motivo', () => {
+  const ahora = new Date('2026-11-20T12:00:00Z');
+  const hist = (f: string) => [{ estadoNuevo: 'Nueva', fecha: f, usuario: 'x' }] as OT['lifecycleHistory'];
+  const ots = [
+    ot({ codigo: 'VISITA', tipo: 'Preventiva' }),
+    ot({ codigo: 'C-APROB', tipo: 'Correctiva', estado: 'Asignada', lifecycleHistory: hist('2026-11-01T12:00:00Z') }),
+    ot({ codigo: 'C-WAPPR', tipo: 'Correctiva', estado: 'Nueva', lifecycleHistory: hist('2026-10-01T12:00:00Z') }),
+    ot({ codigo: 'C-HOLD', tipo: 'Emergencia', estado: 'En espera de repuesto', motivoEsperaCodigo: 'REPUESTO' }),
+    ot({ codigo: 'C-MISMO-DIA', tipo: 'Correctiva', estado: 'Programada', fechaInicio: '2026-11-25' }),
+    ot({ codigo: 'C-OTRA', tipo: 'Correctiva', estado: 'Asignada', plantaId: 'P2' }),
+    ot({ codigo: 'C-CERRADA', tipo: 'Correctiva', estado: 'Cerrada' }),
+  ];
+  const r = correctivosPendientes(ots, 'P1', 'VISITA', '2026-11-25', ahora);
+  assert.deepEqual(r.map(p => [p.ot.codigo, p.sumable]), [['C-APROB', true], ['C-WAPPR', false], ['C-HOLD', false]]);
+  assert.equal(r[0].antiguedad, 19);
+  assert.match(r[1].motivo!, /aprobarlo/);
+  assert.match(r[2].motivo!, /REPUESTO/);
+});

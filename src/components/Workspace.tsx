@@ -274,6 +274,7 @@ export default function Workspace({
       estado: OTEstado;
       observaciones: string;
       motivoReprogramacion?: string;
+      sumarCodigos?: string[];
     }
   ) => {
     const o = ots.find((x) => x.codigo === otCodigo);
@@ -292,7 +293,25 @@ export default function Workspace({
     };
     const next = withEstado(o, data.estado, patch, data.motivoReprogramacion || 'Programación desde Workspace');
     if (!next) return;
-    replaceOt(next);
+    // 17B: correctivos de la misma planta que se resuelven en esta visita (todo en un solo cambio de la lista)
+    let lista = ots.map((x) => (x.codigo === next.codigo ? next : x));
+    const sumados: string[] = [];
+    for (const codigo of data.sumarCodigos ?? []) {
+      const c = lista.find((x) => x.codigo === codigo);
+      if (!c) continue;
+      const prog = withEstado(c, 'Programada', {
+        fechaInicio: data.fechaInicio,
+        responsable: data.responsable,
+        tecnicoAsignado: data.responsable,
+        supervisor: data.supervisor,
+        observaciones: `${c.observaciones || ''}\n[Se resuelve en la visita de la OT ${next.codigo} del ${data.fechaInicio}]`.trim(),
+      }, `Sumado a la visita de la OT ${next.codigo}`);
+      if (!prog) continue;
+      lista = lista.map((x) => (x.codigo === prog.codigo ? prog : x));
+      sumados.push(codigo);
+    }
+    onUpdateOts?.(lista);
+    if (sumados.length) notify(`Visita programada con ${sumados.length} correctivo(s) más: ${sumados.join(', ')}.`);
     setIsScheduling(false);
     setSelectedOt(null);
   };
@@ -2312,6 +2331,7 @@ export default function Workspace({
         ot={selectedOt}
         plantas={plantas}
         username={username}
+        ots={ots}
         onSave={handleWorkspaceScheduleSave}
       />
     </div>

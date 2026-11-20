@@ -510,7 +510,7 @@ Before approving any subsequent build or turn, verify the following 12 test path
     - **Regla para agentes:** los módulos de `App.tsx` se importan con `lazy()`; no volver a importarlos de forma directa. El service worker (`public/sw.js`) conserva los archivos que la versión vigente usa en cadena; si se cambia, mantener la prueba 8 de `tests/e2e/piloto.spec.ts` (abrir sin señal).
 - **Agentes de apoyo:** agentes de ECC (`affaan-m/ECC`, MIT) instalados en `.claude/agents/`; procedencia en `.claude/ECC_AGENTS_SOURCE.md`.
 
-### MÓDULO 17B — FUNCIONES DE SOFTWRENCH QUE FALTAN (EN DESARROLLO)
+### MÓDULO 17B — FUNCIONES DE SOFTWRENCH QUE FALTAN (PLAN COMPLETO)
 - **Status:** `ABIERTO / AUTORIZADO 2026-11-20 / RAMA feat/piloto-17a`. Base: `docs/COMPARATIVA_SOFTWRENCH.md` (datos reales: 483 correctivos pendientes, 500 OTs ejecutadas sin cerrar, 824 preventivos vencidos en 90 días).
 - **Plan:** 1) correctivo de seguimiento desde el hallazgo; 2) bandeja de aprobación con días de espera y marca "cobrable"; 3) fecha objetivo del contrato y tablero de vencidas; 4) plazos en la cola de cierre y aprobación múltiple; 5) correctivos pendientes al programar una visita.
 - **Punto 1 HECHO — correctivo de seguimiento:**
@@ -536,6 +536,12 @@ Before approving any subsequent build or turn, verify the following 12 test path
   - Dominio `src/domain/cierre.ts`: `colaDeCierre` (ejecutadas sin cerrar, días desde la ejecución en terreno, firma pendiente y bloqueos de cierre), `firmarEtapa` (Supervisor → Coordinador → Jefe O&M; usa `transitionOT` y agrega la aprobación), `META_CIERRE_DIAS` = 3.
   - Pestaña "Cola de cierre (n)" en OT Center (`src/components/ColaCierre.tsx`): días sin cerrar (ámbar sobre 3, rojo sobre 6), filtro por etapa, "Seleccionar todas las que puedo firmar" y firma de varias OTs a la vez; la firma de cierre solo se ofrece si la OT no tiene bloqueos. Cada OT se envía por separado y el servidor revalida firma y transición.
   - Pruebas: 2 unitarias en `tests/seguimiento.test.ts`, 1 de API (cadena completa con `firmarEtapa`) y paso 12 de `tests/e2e/piloto.spec.ts`.
+- **Punto 5 HECHO — aprovechar la visita:**
+  - Dominio `src/domain/visitas.ts` (`correctivosPendientes`): correctivos y emergencias abiertos de la misma planta; solo los aprobados (por agendar o agendados otro día) se pueden sumar; los que esperan aprobación o están en espera se muestran con su motivo.
+  - Al programar o reprogramar en Workspace (`WorkspaceScheduleModal` en `src/components/WorkspaceViews.tsx`) aparece "Correctivos pendientes en <planta>"; los marcados quedan "Programada" el mismo día y con el mismo técnico, en un solo cambio de la lista (`handleWorkspaceScheduleSave`).
+  - Corregido: el formulario de programación llamaba hooks después de un `return null` (fallaba al abrirse); ahora el cuerpo es un componente aparte con `key` por OT. Sin rótulos "MÓDULO 11B" y con el estado actual visible.
+  - Pruebas: 1 unitaria en `tests/plazos.test.ts` y paso 13 de `tests/e2e/piloto.spec.ts`.
+- **Estado del 17B:** los 5 puntos del plan están hechos (ver `docs/COMPARATIVA_SOFTWRENCH.md`).
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)

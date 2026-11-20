@@ -277,3 +277,27 @@ test('12. el Jefe O&M firma varias OTs a la vez desde la cola de cierre (17B)', 
   }, { timeout: 15_000 }).toBe(true);
   await ctx.close();
 });
+
+test('13. al programar una visita se suma el correctivo pendiente de la planta (17B)', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-CL' });
+  const jefe = await ctx.newPage();
+  await login(jefe, E2E_USERS.jefe);
+  await jefe.getByRole('button', { name: 'ORBI Workspace' }).click();
+  await jefe.getByRole('button', { name: 'Lista de Despacho' }).click();
+  await jefe.getByRole('row').filter({ hasText: OT_PM }).getByRole('button', { name: /Programar|Reprogramar/ }).click();
+
+  // El correctivo creado en el paso 9 y aprobado en el 10 aparece para resolverlo en el mismo viaje
+  const pendiente = jefe.getByRole('group', { name: /Correctivos pendientes en/ });
+  await expect(pendiente).toBeVisible();
+  await pendiente.getByRole('checkbox').first().check();
+  await shot(jefe, '11-visita-con-correctivo');
+  await jefe.getByRole('button', { name: /\+1 correctivo/ }).click();
+
+  await expect.poll(async () => {
+    const ots = (await (await jefe.request.get('/api/ots', { headers: { 'X-ORBI-Request': '1' } })).json()).ots as any[];
+    const seg = ots.find(o => o.otOrigen === OT_PM);
+    const pm = ots.find(o => o.codigo === OT_PM);
+    return seg && pm ? `${seg.estado}|${seg.fechaInicio === pm.fechaInicio}` : '';
+  }, { timeout: 15_000 }).toBe('Programada|true');
+  await ctx.close();
+});

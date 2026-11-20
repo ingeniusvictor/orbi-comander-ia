@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { OT, Planta, OTEstado, OTPrioridad, OTType } from '../types';
 import { getPlantBadgeInfo } from '../data/plantIdentityMap';
+import { correctivosPendientes } from '../domain/visitas';
 
 // ==========================================
 // 1. CONFLICT DETECTION LOGIC & DATA DEFINITION
@@ -793,6 +794,8 @@ interface ScheduleModalProps {
   ot: OT | null;
   plantas: Planta[];
   username: string;
+  /** 17B: todas las OTs, para ofrecer los correctivos pendientes de la misma planta. */
+  ots?: OT[];
   onSave: (
     otCodigo: string,
     data: {
@@ -803,19 +806,27 @@ interface ScheduleModalProps {
       estado: OTEstado;
       observaciones: string;
       motivoReprogramacion?: string;
+      /** 17B: correctivos de la planta que se suman a esta visita. */
+      sumarCodigos?: string[];
     }
   ) => void;
 }
 
-export function WorkspaceScheduleModal({
-  isOpen,
+// 17B: los hooks del formulario viven en un componente aparte (antes se llamaban después de un
+// "return null", lo que React no permite) y se reinician al abrir otra OT.
+export function WorkspaceScheduleModal(props: ScheduleModalProps) {
+  if (!props.isOpen || !props.ot) return null;
+  return <ScheduleModalBody key={props.ot.codigo} {...props} ot={props.ot} />;
+}
+
+function ScheduleModalBody({
   onClose,
   ot,
   plantas,
   username,
   onSave,
-}: ScheduleModalProps) {
-  if (!isOpen || !ot) return null;
+  ots = [],
+}: ScheduleModalProps & { ot: OT; key?: string }) {
 
   const isRescheduling = !!ot.fechaInicio;
 
@@ -827,14 +838,18 @@ export function WorkspaceScheduleModal({
   const [responsable, setResponsable] = useState(ot.responsable || 'Cristián Barraza');
   const [estado, setEstado] = useState<OTEstado>(ot.estado || 'Programada');
   const [observaciones, setObservaciones] = useState(ot.observaciones || '');
-  const [motivo, setMotivo] = useState('Clima');
+  const [motivo, setMotivo] = useState('Clima / Condiciones Atmosféricas');
+  const [sumar, setSumar] = useState<Set<string>>(new Set());
+  const pendientes = correctivosPendientes(ots, ot.plantaId, ot.codigo, date);
 
   const pPlanta = plantas.find(p => p.id === ot.plantaId || p.name === ot.plantaNombre);
   const pZona = pPlanta ? pPlanta.zona : 'Centro';
 
   // Dropdown list options
   const supervisores = ['Alejandro Rojas', 'Mauricio Valdés', 'Francisco Jara'];
-  const tecnicos = ['Cristián Barraza', 'Eduardo Carvallo', 'Daniel Godoy', 'Yasmín Castro', 'Beatriz Loyola', 'Héctor Mellado'];
+  // Técnicos de referencia más quienes ya tienen OTs asignadas (usuarios reales del piloto)
+  const tecnicos = [...new Set(['Cristián Barraza', 'Eduardo Carvallo', 'Daniel Godoy', 'Yasmín Castro', 'Beatriz Loyola', 'Héctor Mellado',
+    ...ots.map(o => o.responsable?.trim()).filter((n): n is string => Boolean(n) && n !== 'Por definir')])].sort((a, b) => a.localeCompare(b, 'es'));
   const motivos = [
     'Clima / Condiciones Atmosféricas',
     'Repuesto no disponible (Bodega)',
@@ -855,6 +870,7 @@ export function WorkspaceScheduleModal({
       estado,
       observaciones,
       motivoReprogramacion: isRescheduling ? motivo : undefined,
+      sumarCodigos: [...sumar],
     });
     onClose();
   };
@@ -866,12 +882,13 @@ export function WorkspaceScheduleModal({
         <div className="bg-slate-950 px-5 py-4 border-b border-slate-850 flex items-center justify-between">
           <div>
             <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest font-extrabold">
-              {isRescheduling ? 'MÓDULO 11B: REPROGRAMAR ACTIVIDAD' : 'MÓDULO 11B: PROGRAMAR Y PLANIFICAR'}
+              {isRescheduling ? 'Reprogramar visita' : 'Programar visita'}
             </span>
-            <h3 className="text-sm font-black text-white">Consola de Coordinación — {ot.codigo}</h3>
+            <h3 className="text-sm font-black text-white">OT <span className="font-mono">{ot.codigo}</span></h3>
           </div>
           <button
             onClick={onClose}
+            aria-label="Cerrar"
             className="text-slate-500 hover:text-white transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" />
@@ -951,9 +968,12 @@ export function WorkspaceScheduleModal({
                 onChange={(e) => setEstado(e.target.value as OTEstado)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-white outline-none focus:border-emerald-500"
               >
+                {!['Programada', 'Asignada', 'En ejecución', 'Bloqueada'].includes(ot.estado) && (
+                  <option value={ot.estado}>{ot.estado} (estado actual)</option>
+                )}
                 <option value="Programada">Programada</option>
                 <option value="Asignada">Asignada / Despachada</option>
-                <option value="En Proceso">En Proceso</option>
+                <option value="En ejecución">En ejecución</option>
                 <option value="Bloqueada">Bloqueada Logística</option>
               </select>
             </div>
@@ -994,7 +1014,7 @@ export function WorkspaceScheduleModal({
           {isRescheduling && (
             <div className="bg-amber-500/5 border border-amber-500/15 p-3 rounded-xl space-y-1.5">
               <label className="text-amber-400 text-[9px] block uppercase font-black font-mono flex items-center gap-1">
-                <History className="h-3.5 w-3.5" /> Motivo de la Reprogramación (Mandatario)
+                <History className="h-3.5 w-3.5" /> Motivo de la reprogramación (obligatorio)
               </label>
               <select
                 value={motivo}
@@ -1012,7 +1032,7 @@ export function WorkspaceScheduleModal({
           )}
 
           {/* Historical Log info if already rescheduled */}
-          {ot.reprogramacionesCount && (
+          {(ot.reprogramacionesCount ?? 0) > 0 && (
             <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 text-[9px] font-mono text-slate-400 space-y-1">
               <div className="flex justify-between">
                 <span>Historial:</span>
@@ -1022,6 +1042,31 @@ export function WorkspaceScheduleModal({
               <div>Último Motivo: <span className="text-slate-200">{ot.ultimoMotivoReprogramacion}</span></div>
               <div>Registrado por: <span className="text-slate-200">{ot.ultimoUsuarioReprogramacion}</span></div>
             </div>
+          )}
+
+          {/* 17B: aprovechar el viaje con los correctivos pendientes de la planta */}
+          {pendientes.length > 0 && (
+            <fieldset className="bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl space-y-2">
+              <legend className="px-1 text-sm font-semibold text-amber-300">Correctivos pendientes en {ot.plantaNombre} ({pendientes.length})</legend>
+              <p className="text-xs text-slate-400">Marca los que quieres resolver en esta misma visita: quedan programados el mismo día con el mismo técnico.</p>
+              <ul className="space-y-1.5">
+                {pendientes.map(p => (
+                  <li key={p.ot.codigo}>
+                    <label className={`flex items-start gap-2 min-h-11 text-sm ${p.sumable ? 'text-slate-200 cursor-pointer' : 'text-slate-400'}`}>
+                      <input type="checkbox" className="mt-1 h-5 w-5 accent-emerald-500 disabled:opacity-30" disabled={!p.sumable}
+                        checked={sumar.has(p.ot.codigo)}
+                        onChange={() => setSumar(prev => { const n = new Set(prev); if (n.has(p.ot.codigo)) n.delete(p.ot.codigo); else n.add(p.ot.codigo); return n; })} />
+                      <span className="min-w-0">
+                        <span className="font-mono">{p.ot.codigo}</span> · {p.ot.prioridad} · {p.ot.diagnosticoInicial || p.ot.activo}
+                        <span className="block text-xs text-slate-400">
+                          {p.antiguedad} día{p.antiguedad === 1 ? '' : 's'} de antigüedad · {p.ot.estado}{p.ot.fechaInicio && p.sumable ? ` (${p.ot.fechaInicio})` : ''}{p.motivo ? ` · ${p.motivo}` : ''}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
           )}
 
           {/* Observaciones */}
@@ -1048,7 +1093,7 @@ export function WorkspaceScheduleModal({
               type="submit"
               className="bg-emerald-500 text-slate-950 font-black font-mono text-xs px-5 py-2 rounded-lg hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/10 cursor-pointer"
             >
-              {isRescheduling ? 'Confirmar Reprogramación' : 'Programar Actividad'}
+              {isRescheduling ? 'Confirmar reprogramación' : 'Programar visita'}{sumar.size ? ` (+${sumar.size} correctivo${sumar.size === 1 ? '' : 's'})` : ''}
             </button>
           </div>
         </form>

@@ -52,6 +52,6 @@ Fecha: 2026-11-20. Fuente: datos reales de SoftWrench/Maximo de la operación (c
 2. Bandeja de aprobación con días de espera y marca de "cobrable" (puntos 2 y 3). **Hecho.**
 3. Fecha objetivo del contrato y tablero de vencidas (punto 4). **Hecho.**
 4. Plazos en la cola de cierre y aprobación múltiple (punto 5). **Hecho.**
-5. Correctivos pendientes al programar una visita (punto 6).
+5. Correctivos pendientes al programar una visita (punto 6). **Hecho.**
 
 Los puntos 1 a 5 atacan directamente los tres números que más pesan hoy: 483 correctivos pendientes, 500 OTs ejecutadas sin cerrar y 824 preventivos vencidos.
