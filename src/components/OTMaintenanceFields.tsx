@@ -17,6 +17,8 @@ interface Props {
   ot: OT;
   /** 17B: todas las OTs visibles, para mostrar el estado de los correctivos de seguimiento. */
   ots?: OT[];
+  /** 17B: coordinación o jefatura: puede marcar la OT como cobrable al cliente. */
+  puedeCobrar?: boolean;
   /** Aplica cambios a la OT (sin cambiar su estado). */
   onChange: (patch: Partial<OT>) => void;
   userName: string;
@@ -27,7 +29,7 @@ interface Props {
 
 const input = 'w-full min-h-11 bg-slate-950 border border-slate-700 rounded-lg px-3 text-sm text-white outline-none focus:border-emerald-500';
 
-export default function OTMaintenanceFields({ ot, ots = [], onChange, userName, canEditPlanning, compact }: Props) {
+export default function OTMaintenanceFields({ ot, ots = [], onChange, userName, canEditPlanning, compact, puedeCobrar }: Props) {
   const assets = useMemo(() => loadAssets(), []);
   const codes = useMemo(() => loadCodes(), []);
   const plantAssets = assets.filter(a => a.activo && (a.plantaId === ot.plantaId || a.plantaId === ot.plantaId?.trim()));
@@ -84,6 +86,20 @@ export default function OTMaintenanceFields({ ot, ots = [], onChange, userName, 
           })}
         </div>
       )}
+
+      {/* 17B: cobro al cliente */}
+      {puedeCobrar ? (
+        <div className="grid gap-2 sm:grid-cols-[auto_1fr] items-center">
+          <label className="inline-flex items-center gap-2 min-h-11 text-sm text-slate-200">
+            <input type="checkbox" className="h-5 w-5 accent-emerald-500" checked={Boolean(ot.cobrable)} onChange={e => onChange({ cobrable: e.target.checked })} />
+            Cobrable al cliente
+          </label>
+          <input aria-label="Respaldo del cobro" className={input} placeholder="N.º de OC o correo de aprobación (opcional)" value={ot.cobrableReferencia || ''} onChange={e => onChange({ cobrableReferencia: e.target.value || undefined })} />
+        </div>
+      ) : ot.cobrable ? (
+        <div className="text-sm text-ok">Cobrable al cliente{ot.cobrableReferencia ? ` · ${ot.cobrableReferencia}` : ''}</div>
+      ) : null}
+      {ot.cobrableDetalle && <div className="text-xs text-slate-400">Cobro marcado por {ot.cobrableDetalle.por} el {ot.cobrableDetalle.fecha.slice(0, 10)}</div>}
 
       {/* Activo */}
       <label className="block space-y-1">

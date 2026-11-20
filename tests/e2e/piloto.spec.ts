@@ -212,3 +212,25 @@ test('9. hallazgo del checklist: el técnico crea un correctivo de seguimiento v
     return Boolean(seg && seg.tipo === 'Correctiva' && seg.prioridad === 'Alta' && origen?.otsSeguimiento?.includes(seg.codigo));
   }, { timeout: 15_000 }).toBe(true);
 });
+
+test('10. el Jefe O&M aprueba el correctivo desde "Por aprobar" y lo asigna (17B)', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-CL' });
+  const jefe = await ctx.newPage();
+  await login(jefe, E2E_USERS.jefe);
+  await jefe.getByRole('button', { name: 'ORBI OT Center' }).click();
+  await jefe.getByRole('tab', { name: /Por aprobar/ }).click();
+  const tarjeta = jefe.getByRole('listitem').filter({ hasText: `Hallazgo en la OT ${OT_PM}` }).first();
+  await expect(tarjeta).toBeVisible();
+  await expect(tarjeta.getByText(/Hoy|día/)).toBeVisible();
+  await tarjeta.getByRole('button', { name: 'Revisar' }).click();
+  await tarjeta.getByLabel('Técnico responsable').selectOption({ label: 'Víctor León' });
+  await shot(jefe, '08-por-aprobar');
+  await tarjeta.getByRole('button', { name: 'Aprobar y asignar' }).click();
+
+  await expect.poll(async () => {
+    const res = await jefe.request.get('/api/ots', { headers: { 'X-ORBI-Request': '1' } });
+    const seg = ((await res.json()).ots as any[]).find(o => o.otOrigen === OT_PM);
+    return seg ? `${seg.estado}|${seg.responsable}|${seg.aprobadaPor}` : '';
+  }, { timeout: 15_000 }).toMatch(/^Asignada\|Víctor León\|/);
+  await ctx.close();
+});

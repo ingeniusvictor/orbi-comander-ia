@@ -13,6 +13,7 @@ import type { OT, OTEstado, RoleType } from '../src/types';
 import { transitionOT, softwrenchCodeOf } from '../src/domain/otStateMachine';
 import { validateLaborLine, totalLaborHours, type LaborLine } from '../src/domain/cmms';
 import { buildFollowUpOT, canCreateFollowUpFrom, validateFollowUpInput } from '../src/domain/seguimiento';
+import { ROLES_COBRO } from '../src/domain/aprobacion';
 
 export interface StoredOT {
   ot: OT;
@@ -39,7 +40,9 @@ export type PatchResult =
 /** Campos que nunca escribe el cliente directamente. */
 const SERVER_OWNED = new Set(['codigo', 'estado', 'lifecycleHistory', '_version',
   // 17B: el vínculo con la OT de origen se fija al crear el correctivo y no se edita después
-  'otOrigen', 'hallazgoOrigen', 'otsSeguimiento', 'reportadoPor']);
+  'otOrigen', 'hallazgoOrigen', 'otsSeguimiento', 'reportadoPor',
+  // 17B: autoría de la aprobación y de la marca cobrable
+  'aprobadaPor', 'fechaAprobacion', 'cobrableDetalle']);
 
 /** Campos que un técnico SÍ puede modificar (lista blanca: todo lo demás se rechaza). */
 const TECH_EDITABLE = new Set([
@@ -269,6 +272,13 @@ export function applyOTPatch(
     } else if (actor.role === 'TECNICO_OM' && !TECH_EDITABLE.has(key)
       && !sameValue(value, (stored.ot as unknown as Record<string, unknown>)[key])) {
       return { ok: false, status: 403, error: `Un técnico no puede modificar el campo "${key}".` };
+    } else if ((key === 'cobrable' || key === 'cobrableReferencia') && !ROLES_COBRO.includes(actor.role)
+      && !sameValue(value, (stored.ot as unknown as Record<string, unknown>)[key])) {
+      return { ok: false, status: 403, error: 'Solo coordinación o jefatura pueden marcar una OT como cobrable.' };
+    } else if (key === 'cobrable' && value != null && typeof value !== 'boolean') {
+      return { ok: false, status: 400, error: 'El campo "cobrable" debe ser sí o no.' };
+    } else if (key === 'cobrableReferencia' && value != null && (typeof value !== 'string' || value.length > 200)) {
+      return { ok: false, status: 400, error: 'La referencia de cobro no es válida.' };
     }
   }
 
@@ -302,6 +312,14 @@ export function applyOTPatch(
   const merged = mergeAppendOnly(stored.ot, changes, actor, fileExists, now);
   if (merged.ok === false) return { ok: false, status: 403, error: merged.error };
   const accepted = merged.changes;
+  // 17B: quién marcó o quitó "cobrable" y cuándo
+  if ('cobrable' in accepted && Boolean(accepted.cobrable) !== Boolean(stored.ot.cobrable)) {
+    accepted.cobrableDetalle = { por: actor.displayName, fecha: now };
+    accepted.historialCambios = [
+      ...(accepted.historialCambios ?? stored.ot.historialCambios ?? []),
+      { fecha: now, usuario: actor.displayName, accion: 'Cobro', detalle: accepted.cobrable ? `Marcada como cobrable${accepted.cobrableReferencia ?? stored.ot.cobrableReferencia ? ` (ref. ${accepted.cobrableReferencia ?? stored.ot.cobrableReferencia})` : ''}` : 'Ya no es cobrable' },
+    ];
+  }
 
   let next: OT;
   if (req.transition && req.transition.to !== stored.ot.estado) {

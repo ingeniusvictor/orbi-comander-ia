@@ -48,8 +48,8 @@ Fecha: 2026-11-20. Fuente: datos reales de SoftWrench/Maximo de la operación (c
 
 ## Propuesta de siguiente fase (Módulo 17B)
 
-1. Correctivo de seguimiento desde el hallazgo del checklist (punto 1).
-2. Bandeja de aprobación con días de espera y marca de "cobrable" (puntos 2 y 3).
+1. Correctivo de seguimiento desde el hallazgo del checklist (punto 1). **Hecho.**
+2. Bandeja de aprobación con días de espera y marca de "cobrable" (puntos 2 y 3). **Hecho.**
 3. Fecha objetivo del contrato y tablero de vencidas (punto 4).
 4. Plazos en la cola de cierre y aprobación múltiple (punto 5).
 5. Correctivos pendientes al programar una visita (punto 6).

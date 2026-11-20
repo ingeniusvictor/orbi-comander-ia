@@ -348,3 +348,23 @@ test('17B: reglas del correctivo de seguimiento', async () => {
   // Origen inexistente
   assert.equal((await tecnico.send('/ots', 'POST', { ot: { ...ajenaSeg, codigo: newFollowUpCode(), otOrigen: 'NO-EXISTE' } })).status, 404);
 });
+
+test('17B: aprobación del correctivo y marca de cobrable con autor', async () => {
+  const seg = ((await coordinador.get('/ots')).ots as OT[]).find(o => o.otOrigen === '26-29221' && o.estado === 'Nueva')
+    ?? (() => { throw new Error('falta un correctivo por aprobar'); })();
+  // El supervisor no aprueba; el técnico no marca cobrable
+  assert.equal((await supervisor.patch(seg, { responsable: 'Víctor León' }, { to: 'Asignada' })).status, 422);
+  const segTec = await tecnico.ot(seg.codigo);
+  assert.equal((await tecnico.patch(segTec, { cobrable: true })).status, 403);
+  // Coordinación marca cobrable: el servidor registra quién y cuándo (aunque el cliente intente otro autor)
+  let ot = ok(await coordinador.patch(await coordinador.ot(seg.codigo),
+    { cobrable: true, cobrableReferencia: 'OC 4500123', cobrableDetalle: { por: 'Otro', fecha: '2000-01-01' } } as Partial<OT>), 'cobrable');
+  assert.equal(ot.cobrable, true);
+  assert.equal(ot.cobrableDetalle?.por, 'Rodolfo Garcés');
+  assert.ok(ot.historialCambios?.some(h => h.accion === 'Cobro' && /OC 4500123/.test(h.detalle)));
+  // Aprobar sin técnico: rechazado; con técnico: aprobado con autor
+  assert.equal((await coordinador.patch(ot, { responsable: '', tecnicoAsignado: '' }, { to: 'Asignada' })).status, 422);
+  ot = ok(await coordinador.patch(ot, { responsable: 'Víctor León', tecnicoAsignado: 'Víctor León' }, { to: 'Asignada' }), 'aprobar');
+  assert.equal(ot.aprobadaPor, 'Rodolfo Garcés');
+  assert.ok(ot.fechaAprobacion);
+});

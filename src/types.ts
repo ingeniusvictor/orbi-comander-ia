@@ -240,6 +240,15 @@ export interface OT {
   otsSeguimiento?: string[];
   /** 17B: quién reportó el hallazgo (lo fija el servidor con el usuario de la sesión). */
   reportadoPor?: string;
+  /** 17B: quién aprobó la OT (salida de "Espera aprobación") y cuándo; lo fija la máquina de estados. */
+  aprobadaPor?: string;
+  fechaAprobacion?: string;
+  /** 17B: el cliente aprobó pagar este trabajo (lo marca coordinación o jefatura). */
+  cobrable?: boolean;
+  /** 17B: respaldo de la aprobación del cliente (n.º de OC, correo, etc.). */
+  cobrableReferencia?: string;
+  /** 17B: quién marcó o quitó "cobrable" y cuándo (lo fija el servidor). */
+  cobrableDetalle?: { por: string; fecha: string };
   plantaId: string;
   plantaNombre: string;
   legacyPlantId?: string;

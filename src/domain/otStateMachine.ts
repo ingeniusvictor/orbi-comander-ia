@@ -11,6 +11,9 @@
 import type { OT, OTEstado, RoleType } from '../types';
 import { implicitWaitCode, requiresFailureCode } from './cmms';
 
+/** 17B: quién puede aprobar una OT (sacarla de "Espera aprobación"). */
+export const ROLES_APROBACION: RoleType[] = ['SUPER_ADMIN_ORBI', 'JEFE_OM', 'COORDINADOR_OM', 'GERENCIA', 'PLANIFICACION'];
+
 /** Códigos de estado de SoftWrench / Maximo. */
 export type SoftwrenchCode =
   | 'WAPPR'   // Espera aprobación
@@ -210,6 +213,17 @@ export function transitionOT(
     return { ok: false, error: 'Tu rol no puede cancelar OTs.' };
   }
   const fromCode = softwrenchCodeOf(from)!;
+  // 17B: aprobar = salir de "Espera aprobación" hacia el trabajo (no cancelar)
+  if (fromCode === 'WAPPR' && toCode !== 'WAPPR' && toCode !== 'CAN') {
+    if (!ROLES_APROBACION.includes(ctx.rol)) {
+      return { ok: false, error: 'Solo coordinación, planificación o jefatura pueden aprobar una OT.' };
+    }
+    if ((to === 'Asignada' || to === 'Programada') && !candidate.responsable?.trim()) {
+      return { ok: false, error: 'Asigna un técnico responsable antes de aprobar la OT como asignada o programada.' };
+    }
+    candidate.aprobadaPor = ctx.usuario;
+    candidate.fechaAprobacion = (ctx.ahora ?? new Date()).toISOString();
+  }
   const entraARevision = toCode === 'FDCOMP' || (toCode === 'RSALOR' && fromCode !== 'FDCOMP' && fromCode !== 'RSALOR');
   if (entraARevision) {
     const errors = executionBlockers(candidate);

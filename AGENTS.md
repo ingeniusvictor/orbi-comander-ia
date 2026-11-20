@@ -521,6 +521,12 @@ Before approving any subsequent build or turn, verify the following 12 test path
   - Ficha de la OT (OT Center y Vista Terreno): muestra la OT de origen y los correctivos creados desde ella (`OTMaintenanceFields`).
   - Pruebas: `tests/seguimiento.test.ts`, dos pruebas 17B en `tests/e2e-api.test.ts` y paso 9 de `tests/e2e/piloto.spec.ts`.
 - **Regla para agentes:** el vínculo entre OTs lo escribe solo el servidor; no permitir que el cliente fije `otOrigen`, `otsSeguimiento` ni `reportadoPor` por otra vía.
+- **Punto 2 HECHO — bandeja de aprobación y cobrable:**
+  - Dominio `src/domain/aprobacion.ts` (`pendientesDeAprobacion`, `diasEsperando`, `ALERTA_DIAS_APROBACION` = 15, `ROLES_APROBACION`, `ROLES_COBRO`).
+  - Regla en `transitionOT`: salir de "Espera aprobación" (WAPPR) hacia el trabajo solo lo hacen `SUPER_ADMIN_ORBI`, `JEFE_OM`, `COORDINADOR_OM`, `GERENCIA` y `PLANIFICACION`; a "Asignada" o "Programada" exige técnico responsable; registra `aprobadaPor` y `fechaAprobacion`. Rechazar = cancelar (reglas de cancelación).
+  - Pestaña "Por aprobar (n)" en OT Center (`src/components/BandejaAprobacion.tsx`): más antiguas primero, días de espera (ámbar desde 15, rojo desde 30), filtro por planta, aprobar y asignar, rechazar con motivo, marcar cobrable.
+  - Campos `cobrable`, `cobrableReferencia` (los marca coordinación o jefatura; también en la ficha de la OT) y `cobrableDetalle` (quién y cuándo, lo fija el servidor y queda en el historial).
+  - Pruebas: 2 unitarias en `tests/seguimiento.test.ts`, 1 de API y paso 10 de `tests/e2e/piloto.spec.ts`.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)
