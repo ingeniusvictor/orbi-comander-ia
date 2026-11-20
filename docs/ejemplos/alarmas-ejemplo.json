@@ -1,0 +1,12 @@
+[
+  {
+    "systemKey": "EJEMPLO",
+    "plantaId": "ORBI-PV-058",
+    "alarmas": [
+      { "id": 1001, "severity": "critical", "status": "open", "title": "EJEMPLO - Inversor sin producción", "startedAt": "2026-11-20T08:00:00-03:00", "components": [{ "name": "GI-106" }] },
+      { "id": 1002, "severity": "high", "status": "open", "title": "EJEMPLO - Temperatura alta", "startedAt": "2026-11-20T08:10:00-03:00", "components": [{ "name": "GI-106" }] },
+      { "id": 1003, "severity": "normal", "status": "open", "title": "EJEMPLO - Aviso de comunicación", "startedAt": "2026-11-20T08:20:00-03:00" },
+      { "id": 1004, "severity": "high", "status": "closed", "title": "EJEMPLO - Alarma ya resuelta", "startedAt": "2026-11-20T06:00:00-03:00", "endedAt": "2026-11-20T06:30:00-03:00" }
+    ]
+  }
+]

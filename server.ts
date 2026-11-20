@@ -13,6 +13,7 @@ import { sessionMiddleware, requireAuth, requireCsrfHeader, purgeExpiredSessions
 import { createApiRouter } from './server/routes';
 import { seedIfEmpty } from './server/repo';
 import { runPmGeneration } from './server/pm';
+import { programarAlarmas } from './server/alarmas';
 import fs from 'node:fs';
 
 dotenv.config();
@@ -96,6 +97,8 @@ async function startServer() {
   pmRun();
   setInterval(pmRun, 24 * 60 * 60 * 1000).unref();
   setInterval(() => purgeExpiredSessions(db), 60 * 60 * 1000).unref();
+  // 17D: alarmas de VCOM → correctivos (solo si el portal O&M está configurado)
+  if (programarAlarmas(db)) console.log('[ORBI] Revisión de alarmas VCOM activada.');
 
   // JSON global de 256 kb; las colecciones compartidas tienen su propio límite (2 MB)
   const jsonParser = express.json({ limit: '256kb' });

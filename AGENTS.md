@@ -553,6 +553,14 @@ Before approving any subsequent build or turn, verify the following 12 test path
 - **Actualización (mismo comando con una extracción nueva):** `actualizarDesdeSw` en `src/domain/softwrenchImport.ts`. Solo OTs con campo `softwrench`; el estado solo avanza (rango WAPPR < RTBSCH < DAPPR < INPROG/HOLD < FDCOMP/RQARVW < RSALOR < COMPL/CAN), nunca retrocede lo hecho en ORBI; fechas solo si no empezó; técnico/HH solo si están vacíos; cobrable solo se agrega; plantillas sin preguntas se reemplazan (versión + 1) y los checklists aún sin tocar reciben las preguntas reales. Cada OT actualizada sube de versión con sus `fieldVersions`.
 - Segunda carga (2026-11-20): preguntas reales de 66 formularios (13 planes: mensuales, trimestrales y 2 anuales); 8 OTs programadas recibieron su checklist real. Faltan las preguntas de 60 formularios, sobre todo anuales y de termografía, que SoftWrench solo muestra en OTs ejecutadas.
 - **Regla para agentes:** las preguntas condicionales de SoftWrench ("¿Qué … falta?") no se cargan como pregunta: se responden con Hallazgo + observación.
+
+### MÓDULO 17D — ALARMAS DEL SCADA (VCOM) → CORRECTIVOS (LISTO, SIN CONECTAR)
+- **Fuente:** API del portal O&M de TriTec (FastAPI, Entra ID; revisada en su ambiente de desarrollo). No entrega OTs de SoftWrench; sí alarmas VCOM, numeración PT/AST, plantas/equipos, semáforo de equipos, bitácora y disponibilidad.
+- Dominio `src/domain/alarmas.ts` (`normalizarAlarma`, `planificarAlarmas`, `correctivoDesdeAlarma`, `agregarAlarma`, `REGLA_POR_DEFECTO`): high/critical, abiertas ≥ 30 min, una OT por alarma (`AL-<systemKey>-<id>`), agrupación por equipo y alarmas nuevas agregadas al correctivo abierto del mismo equipo. El correctivo nace "Nueva" (Por aprobar), origen "Centro de Control", campo `alarmasOrigen` (solo lo escribe el servidor).
+- Servidor: `server/portalOm.ts` (configuración `ORBI_PORTAL_OM_*` y `ORBI_VCOM_PLANTAS`, token de Entra ID por credenciales de aplicación) y `server/alarmas.ts` (`procesarAlarmas`, revisión cada `ORBI_ALARMAS_MINUTOS`, estado en `GET /api/integraciones/alarmas`). Sin variables queda apagado. Comando `npm run alarmas -- <archivo> | --portal [--aplicar]`.
+- Pantalla: "Por aprobar" muestra el estado de la conexión y la alarma de origen; la ficha de la OT, las alarmas con severidad y hora.
+- Guía: `docs/ALARMAS_VCOM.md`. Ejemplo: `docs/ejemplos/alarmas-ejemplo.json` (datos inventados; no aplicar en la base del piloto). Pruebas: `tests/alarmas.test.ts`.
+- **Pendiente (TI):** registrar ORBI en Entra ID con permiso en la API del portal (producción) y entregar el `systemKey` de cada planta. Confirmar el formato real de las alarmas con la primera respuesta.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)

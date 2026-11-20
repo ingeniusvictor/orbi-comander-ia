@@ -5,8 +5,8 @@
  * esperando (alerta desde 15 días). Coordinación aprueba asignando técnico, rechaza con motivo
  * o marca el trabajo como cobrable cuando el cliente aprobó pagarlo. El servidor vuelve a validar todo.
  */
-import React, { useMemo, useState } from 'react';
-import { Check, X, Clock, Wrench, Receipt } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Check, X, Clock, Wrench, Receipt, Radio } from 'lucide-react';
 import type { OT, OrganigramaNode, RoleType } from '../types';
 import { transitionOT } from '../domain/otStateMachine';
 import { pendientesDeAprobacion, ALERTA_DIAS_APROBACION, ROLES_APROBACION, ROLES_COBRO } from '../domain/aprobacion';
@@ -53,6 +53,14 @@ export default function BandejaAprobacion({ ots, organigrama, userRole, activeUs
   const [tecnico, setTecnico] = useState('');
   const [motivo, setMotivo] = useState('');
   const [referencia, setReferencia] = useState('');
+  // 17D: estado de la conexión con las alarmas del SCADA
+  const [alarmas, setAlarmas] = useState<{ configurada: boolean; ultimaRevision?: string; error?: string } | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/integraciones/alarmas', { headers: { 'X-ORBI-Request': '1' }, credentials: 'same-origin' })
+      .then(r => (r.ok ? r.json() : null)).then(j => { if (vivo) setAlarmas(j); }).catch(() => { /* sin señal: no se muestra */ });
+    return () => { vivo = false; };
+  }, []);
 
   const plantas = [...new Set(pendientes.map(p => p.ot.plantaNombre))].sort();
   const visibles = pendientes.filter(p => !planta || p.ot.plantaNombre === planta);
@@ -109,6 +117,15 @@ export default function BandejaAprobacion({ ots, organigrama, userRole, activeUs
         </label>
       </div>
 
+      {alarmas && (
+        <p className="text-xs text-slate-400 inline-flex items-center gap-1.5">
+          <Radio className="h-3.5 w-3.5" aria-hidden="true" />
+          {!alarmas.configurada ? 'Alarmas del SCADA (VCOM): aún no conectadas. Los correctivos por alarma aparecerán aquí al conectarlas.'
+            : alarmas.error ? `Alarmas del SCADA (VCOM): no se pudieron revisar (${alarmas.error}).`
+            : `Alarmas del SCADA (VCOM): conectadas${alarmas.ultimaRevision ? `, última revisión ${new Date(alarmas.ultimaRevision).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}` : ''}.`}
+        </p>
+      )}
+
       {!puedeAprobar && (
         <p className="text-sm text-slate-400">Puedes ver la bandeja, pero aprobar corresponde a coordinación, planificación o jefatura.</p>
       )}
@@ -132,6 +149,12 @@ export default function BandejaAprobacion({ ots, organigrama, userRole, activeUs
                 </div>
                 <p className="text-sm font-semibold text-white">{ot.plantaNombre} · {ot.activo}</p>
                 <p className="text-sm text-slate-300">{ot.diagnosticoInicial || ot.observaciones}</p>
+                {ot.alarmasOrigen && ot.alarmasOrigen.length > 0 && (
+                  <p className="text-xs text-danger inline-flex items-center gap-1">
+                    <Radio className="h-3.5 w-3.5" aria-hidden="true" />
+                    Alarma del SCADA: {ot.alarmasOrigen[0].titulo}{ot.alarmasOrigen.length > 1 ? ` (+${ot.alarmasOrigen.length - 1})` : ''}
+                  </p>
+                )}
                 {ot.otOrigen && (
                   <p className="text-xs text-slate-400 inline-flex items-center gap-1">
                     <Wrench className="h-3.5 w-3.5" aria-hidden="true" />

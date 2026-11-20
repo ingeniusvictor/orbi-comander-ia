@@ -44,7 +44,9 @@ const SERVER_OWNED = new Set(['codigo', 'estado', 'lifecycleHistory', '_version'
   // 17B: autoría de la aprobación y de la marca cobrable
   'aprobadaPor', 'fechaAprobacion', 'cobrableDetalle',
   // 17C: datos de origen de una OT importada desde SoftWrench
-  'softwrench']);
+  'softwrench',
+  // 17D: alarmas de VCOM que originaron el correctivo (las escribe el proceso de alarmas)
+  'alarmasOrigen']);
 
 /** Campos que un técnico SÍ puede modificar (lista blanca: todo lo demás se rechaza). */
 const TECH_EDITABLE = new Set([

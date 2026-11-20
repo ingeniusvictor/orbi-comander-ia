@@ -22,6 +22,7 @@ import { inTransaction } from './db';
 import { isSharedCollection, canWriteCollection, canReadCollection, violatesAppendOnly, MAX_COLLECTION_BYTES } from './collections';
 import * as repo from './repo';
 import { runPmGeneration, todayInOperationZone } from './pm';
+import { estadoAlarmas } from './alarmas';
 import { STORAGE_KEYS } from '../src/data/storage';
 import type { OT, Escalation } from '../src/types';
 
@@ -242,6 +243,15 @@ export function createApiRouter(db: Db): express.Router {
     const result = runPmGeneration(db, undefined, req.user!.displayName);
     repo.addAudit(db, { userId: req.user!.id, usuario: req.user!.displayName, rol: req.user!.role, accion: 'Generación de preventivos', modulo: 'Planes preventivos', comentario: `${result.creadas.length} OT(s): ${result.creadas.join(', ')}`, criticidad: 'Media' });
     res.json(result);
+  });
+
+  // 17D: estado de la integración de alarmas VCOM (sin datos sensibles)
+  router.get('/integraciones/alarmas', (req, res) => {
+    if (req.user!.role === 'TECNICO_OM') {
+      res.status(403).json({ error: 'Sin acceso.' });
+      return;
+    }
+    res.json(estadoAlarmas);
   });
 
   // ---------- Auditoría ----------

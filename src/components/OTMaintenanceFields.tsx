@@ -65,6 +65,19 @@ export default function OTMaintenanceFields({ ot, ots = [], onChange, userName, 
     <div className={`bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-3 text-xs ${compact ? '' : 'mt-2'}`}>
       <div className="text-sm font-semibold text-accent">Datos de mantenimiento</div>
 
+      {/* 17D: alarmas de VCOM que originaron el correctivo */}
+      {ot.alarmasOrigen && ot.alarmasOrigen.length > 0 && (
+        <div className="rounded-lg border border-danger/30 bg-danger/5 p-2 space-y-1">
+          <div className="text-sm font-semibold text-danger">Creado por alarma{ot.alarmasOrigen.length > 1 ? 's' : ''} del SCADA (VCOM)</div>
+          {ot.alarmasOrigen.map(a => (
+            <div key={`${a.systemKey}-${a.id}`} className="text-sm text-slate-200">
+              {a.equipo ? <span className="font-mono">{a.equipo}</span> : null}{a.equipo ? ' · ' : ''}{a.titulo}
+              <span className="text-slate-400"> · severidad {({ critical: 'Crítica', high: 'Alta', normal: 'Normal' })[a.severidad]} · desde {a.inicio.replace('T', ' ').slice(0, 16)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 17C: OT importada desde SoftWrench */}
       {ot.softwrench && (
         <div className="text-sm text-slate-300">
