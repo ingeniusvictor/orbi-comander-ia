@@ -65,6 +65,16 @@ export default function OTMaintenanceFields({ ot, ots = [], onChange, userName, 
     <div className={`bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-3 text-xs ${compact ? '' : 'mt-2'}`}>
       <div className="text-sm font-semibold text-accent">Datos de mantenimiento</div>
 
+      {/* 17C: OT importada desde SoftWrench */}
+      {ot.softwrench && (
+        <div className="text-sm text-slate-300">
+          Importada desde SoftWrench (OT <span className="font-mono">{ot.softwrench.wonum}</span>, estado {ot.softwrench.estado})
+          {ot.softwrench.enlace && /^https:\/\//.test(ot.softwrench.enlace) && (
+            <> · <a href={ot.softwrench.enlace} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">Ver en SoftWrench</a></>
+          )}
+        </div>
+      )}
+
       {/* 17B: vínculo con la OT donde se encontró la falla y correctivos que nacieron de esta OT */}
       {ot.otOrigen && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 text-sm text-slate-200">

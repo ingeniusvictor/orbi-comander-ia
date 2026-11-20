@@ -240,6 +240,8 @@ export interface OT {
   otsSeguimiento?: string[];
   /** 17B: quién reportó el hallazgo (lo fija el servidor con el usuario de la sesión). */
   reportadoPor?: string;
+  /** 17C: OT importada desde SoftWrench (número, estado de origen y enlace para consultarla allá). */
+  softwrench?: { wonum: string; workorderid?: number; estado: string; enlace?: string; importadoEl: string };
   /** 17B: fecha objetivo del contrato (preventivos) y último día en que aún se cumple (objetivo + margen). */
   fechaObjetivo?: string;
   fechaObjetivoLimite?: string;

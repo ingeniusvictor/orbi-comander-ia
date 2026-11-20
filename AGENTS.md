@@ -542,6 +542,14 @@ Before approving any subsequent build or turn, verify the following 12 test path
   - Corregido: el formulario de programación llamaba hooks después de un `return null` (fallaba al abrirse); ahora el cuerpo es un componente aparte con `key` por OT. Sin rótulos "MÓDULO 11B" y con el estado actual visible.
   - Pruebas: 1 unitaria en `tests/plazos.test.ts` y paso 13 de `tests/e2e/piloto.spec.ts`.
 - **Estado del 17B:** los 5 puntos del plan están hechos (ver `docs/COMPARATIVA_SOFTWRENCH.md`).
+
+### MÓDULO 17C — IMPORTACIÓN DESDE SOFTWRENCH (HECHO)
+- **Objetivo:** probar el piloto con datos reales de una planta (primero Cantillana) en paralelo con SoftWrench.
+- Dominio `src/domain/softwrenchImport.ts` (`construirImportacion`, `ESTADO_DESDE_SW`, `TIPO_DESDE_SW`, `nombreDesdeCorreo`); servidor `server/importSoftwrench.ts` (`importarSnapshot`, en una transacción y con las mismas validaciones de "Activos y Preventivos"); comando `npm run import:softwrench -- <archivo> [--aplicar]` (sin `--aplicar` solo simula). Guía: `docs/IMPORTAR_SOFTWRENCH.md`.
+- Identificadores fijos (`sw-…` y el número de OT de SoftWrench): reimportar no duplica; lo existente no se pisa; un plan con el mismo número ya existente se reutiliza.
+- Planes importados **inactivos** (SoftWrench sigue generando las OTs); OTs solo abiertas o ejecutadas sin cerrar; las ejecutadas entran a la cola de cierre con su día de ejecución en terreno. Campo `softwrench` en la OT (número, estado, enlace), escrito solo por el servidor (`SERVER_OWNED`); la ficha muestra "Ver en SoftWrench".
+- Primera carga (2026-11-20, base local del piloto): Cantillana con 39 inversores, 126 formularios (5 con sus preguntas reales: checklist mensual de inversores), 30 planes y 32 OTs (20 programadas y 12 ejecutadas sin cerrar, con 59 días promedio de espera).
+- **Regla para agentes:** las extracciones contienen datos reales: van en `data/importaciones/` (fuera de git) y nunca se suben al repositorio. Las pruebas usan datos inventados (`tests/softwrenchImport.test.ts`).
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)

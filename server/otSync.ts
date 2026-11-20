@@ -42,7 +42,9 @@ const SERVER_OWNED = new Set(['codigo', 'estado', 'lifecycleHistory', '_version'
   // 17B: el vínculo con la OT de origen se fija al crear el correctivo y no se edita después
   'otOrigen', 'hallazgoOrigen', 'otsSeguimiento', 'reportadoPor',
   // 17B: autoría de la aprobación y de la marca cobrable
-  'aprobadaPor', 'fechaAprobacion', 'cobrableDetalle']);
+  'aprobadaPor', 'fechaAprobacion', 'cobrableDetalle',
+  // 17C: datos de origen de una OT importada desde SoftWrench
+  'softwrench']);
 
 /** Campos que un técnico SÍ puede modificar (lista blanca: todo lo demás se rechaza). */
 const TECH_EDITABLE = new Set([
