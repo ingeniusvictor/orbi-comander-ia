@@ -96,3 +96,67 @@ test('importar dos veces no duplica nada y lo existente no se pisa', async () =>
   assert.equal(otra.resumen.ots.existentes, 3);
   assert.equal(repo.listOTs(db).length, 3);
 });
+
+// ---------------- Actualización (segunda extracción) ----------------
+import { actualizarDesdeSw } from '../src/domain/softwrenchImport';
+import type { OT } from '../src/types';
+
+test('actualizar: avanza estados, cierra, completa técnico/HH y carga las preguntas en checklists sin empezar', async () => {
+  const { openDb } = await import('../server/db');
+  const { importarSnapshot } = await import('../server/importSoftwrench');
+  const repo = await import('../server/repo');
+  const db = openDb(':memory:');
+  const primera: SwSnapshot = structuredClone(snap);
+  primera.planes.push({ pmnum: '9003', descripcion: 'MP Mensual General -', periodicidad: 'mensual', proximaFecha: '2026-12-30', plantillas: ['DEMO_GEN_M1'] });
+  primera.ots.push({ wonum: '26-900005', description: 'MP Mensual General - Noviembre', status: 'DAPPR', worktype: 'PM', pmnum: '9003', schedstart: '2026-11-26T08:00:00' });
+  importarSnapshot(db, primera, { aplicar: true, ahora: new Date('2026-11-20T12:00:00Z') });
+  const v1 = repo.getOT(db, '26-900001')!.version;
+
+  const segunda: SwSnapshot = structuredClone(primera);
+  const ot = (w: string) => segunda.ots.find(o => o.wonum === w)!;
+  Object.assign(ot('26-900001'), { status: 'RSALOR', fechaTerreno: '2026-11-25T08:00:00', statusdate: '2026-11-26T10:00:00', tecnicosConHoras: ['ANA.PEREZ@ejemplo.cl'], horasTotales: 6 });
+  Object.assign(ot('26-900002'), { status: 'COMPL', statusdate: '2026-11-27T10:00:00' });
+  Object.assign(ot('26-900005'), { schedstart: '2026-11-28T08:00:00' });
+  segunda.plantillas.find(p => p.codigo === 'DEMO_GEN_M1')!.preguntas = [{ texto: '¿Cerco sin daños?' }, { texto: '¿Caminos despejados?' }];
+
+  const r = importarSnapshot(db, segunda, { aplicar: true, ahora: new Date('2026-11-28T12:00:00Z') });
+  assert.equal(r.resumen.ots.nuevas, 0);
+  assert.equal(r.resumen.plantillas.actualizadas, 1);
+
+  const a = repo.getOT(db, '26-900001')!;
+  assert.equal(a.ot.estado, 'En revisión Coordinador');
+  assert.equal(a.ot.responsable, 'Ana Perez');
+  assert.equal(a.ot.hhReales, 6);
+  assert.equal(a.version, v1 + 1, 'nueva versión para que los teléfonos la reciban');
+  assert.ok(a.ot.lifecycleHistory!.some(h => h.estadoNuevo === 'Finalizada' && h.fecha.startsWith('2026-11-25')));
+  assert.equal(a.fieldVersions.estado, a.version);
+
+  const cerrada = repo.getOT(db, '26-900002')!.ot;
+  assert.equal(cerrada.estado, 'Cerrada');
+  assert.equal(cerrada.fechaCierre, '2026-11-27');
+
+  const gen = repo.getOT(db, '26-900005')!.ot;
+  assert.equal(gen.fechaInicio, '2026-11-28', 'reprogramada en SoftWrench');
+  assert.deepEqual(gen.checklistExecution!.map(c => c.item), ['[DEMO_GEN_M1] ¿Cerco sin daños?', '[DEMO_GEN_M1] ¿Caminos despejados?']);
+  const tpl = (repo.getCollection(db, 'orbi_cmms_checklist_templates_v1')!.data as { codigo: string; version: number }[]).find(t => t.codigo === 'DEMO_GEN_M1')!;
+  assert.equal(tpl.version, 2);
+
+  // Tercera extracción igual a la segunda: nada que actualizar
+  const otra = importarSnapshot(db, segunda, { aplicar: true, ahora: new Date('2026-11-29T12:00:00Z') });
+  assert.deepEqual([otra.resumen.ots.actualizadas, otra.resumen.plantillas.actualizadas], [0, 0]);
+});
+
+test('actualizar: nunca retrocede lo avanzado en ORBI, no pisa un checklist empezado ni toca OTs creadas en ORBI', () => {
+  const base = { codigo: '26-1', estado: 'En ejecución', responsable: 'Técnico ORBI', hhReales: 3, softwrench: { wonum: '26-1', estado: 'DAPPR', importadoEl: 'x' },
+    checklistExecution: [{ item: 'x', completado: true }], lifecycleHistory: [] } as unknown as OT;
+  const w = { wonum: '26-1', description: 'd', status: 'DAPPR', worktype: 'PM', schedstart: '2026-12-01T08:00:00', tecnicosConHoras: ['OTRO.TEC@x.cl'], horasTotales: 1 };
+  const tpl = { id: 'sw-tpl-X', codigo: 'X', nombre: 'X', version: 2, activo: true, items: [{ id: 'i', texto: 'q', tipo: 'ok_nok' as const }] };
+  const r = actualizarDesdeSw(base, w, [tpl], [tpl], '2026-11-28T00:00:00Z');
+  assert.ok(r === null || r.ot.estado === 'En ejecución');
+  if (r) {
+    assert.equal(r.ot.responsable, 'Técnico ORBI');
+    assert.equal(r.ot.fechaInicio, undefined, 'no se reprograma una OT ya empezada');
+    assert.equal(r.ot.checklistExecution![0].completado, true);
+  }
+  assert.equal(actualizarDesdeSw({ ...base, softwrench: undefined } as OT, w, [], [], 'x'), null);
+});

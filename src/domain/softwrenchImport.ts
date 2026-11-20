@@ -12,6 +12,7 @@
  *  - Solo se importan OTs abiertas o ejecutadas sin cerrar; las cerradas siguen en SoftWrench.
  */
 import type { OT, OTEstado, OTType } from '../types';
+import { softwrenchCodeOf } from './otStateMachine';
 import {
   buildChecklistFromTemplates, TOLERANCIA_POR_DEFECTO, addDaysIso, PERIODICIDADES,
   type Asset, type ChecklistTemplate, type PmPlan, type Periodicidad,
@@ -108,14 +109,36 @@ export interface ResultadoImportacion {
   templates: ChecklistTemplate[];
   plans: PmPlan[];
   ots: OT[];
+  /** Plantillas importadas antes sin preguntas que ahora las traen (versión + 1). */
+  templatesActualizadas: ChecklistTemplate[];
+  /** OTs importadas antes cuyo estado, fechas, técnico, HH o checklist cambiaron en SoftWrench. */
+  otsActualizadas: OT[];
   resumen: {
     equipos: { nuevos: number; existentes: number };
-    plantillas: { nuevas: number; existentes: number; sinPreguntas: number };
+    plantillas: { nuevas: number; existentes: number; sinPreguntas: number; actualizadas: number };
     planes: { nuevos: number; existentes: number; omitidos: string[] };
-    ots: { nuevas: number; existentes: number; omitidasCerradas: number; porEstado: Record<string, number> };
+    ots: { nuevas: number; existentes: number; actualizadas: number; omitidasCerradas: number; porEstado: Record<string, number> };
+    cambios: string[];
     avisos: string[];
   };
 }
+
+/** Orden del avance de una OT según SoftWrench: una actualización solo puede hacerla avanzar. */
+const RANGO_SW: Record<string, number> = {
+  WAPPR: 0, APPR: 1, RTBSCH: 1, WSCH: 1, DAPPR: 2, INPROG: 3, INPRG: 3, HOLD: 3, RQARVW: 4, FDCOMP: 4, RSALOR: 5,
+  COMPL: 6, COMP: 6, CLOSE: 6, CLOSED: 6, CAN: 6,
+};
+const rangoOrbi = (estado: OTEstado) => RANGO_SW[softwrenchCodeOf(estado) ?? ''] ?? 0;
+/** Estado ORBI al que lleva una actualización (incluye cierre y cancelación, que no se importan como OTs nuevas). */
+function estadoDestino(status: string): OTEstado | undefined {
+  if (status === 'CAN') return 'Cancelada';
+  if (['COMPL', 'COMP', 'CLOSE', 'CLOSED'].includes(status)) return 'Cerrada';
+  return ESTADO_DESDE_SW[status] ?? undefined;
+}
+const PLACEHOLDER = 'aún no se han cargado desde SoftWrench';
+export const esPlantillaSinPreguntas = (t: ChecklistTemplate) => t.items.length === 1 && t.items[0].texto.includes(PLACEHOLDER);
+/** El técnico aún no tocó el checklist (se puede reemplazar por uno con las preguntas nuevas). */
+const checklistSinTocar = (ot: OT) => (ot.checklistExecution ?? []).every(c => !c.completado && !c.noAplica && !c.hallazgo && !c.observacion && !(c.fotos && c.fotos.length));
 
 export interface Existentes {
   assetIds: Set<string>;
@@ -124,6 +147,9 @@ export interface Existentes {
   otCodigos: Set<string>;
   /** Planes que ya existen en ORBI por número (pmnum) → su id; no se duplican. */
   planIdPorCodigo?: Map<string, string>;
+  /** Para actualizar: plantillas y OTs ya guardadas. Sin esto, lo existente solo se cuenta. */
+  templates?: Map<string, ChecklistTemplate>;
+  ots?: Map<string, OT>;
 }
 
 export function construirImportacion(snap: SwSnapshot, existentes: Existentes, ahora = new Date()): ResultadoImportacion {
@@ -144,6 +170,7 @@ export function construirImportacion(snap: SwSnapshot, existentes: Existentes, a
 
   // Plantillas: con las preguntas reales cuando la extracción las trae
   const templates: ChecklistTemplate[] = [];
+  const templatesActualizadas: ChecklistTemplate[] = [];
   let sinPreguntas = 0;
   const todasPlantillas = new Map<string, ChecklistTemplate>();
   for (const p of snap.plantillas) {
@@ -159,8 +186,18 @@ export function construirImportacion(snap: SwSnapshot, existentes: Existentes, a
         ? preguntas.map((q, i) => ({ id: `${ids.plantilla(p.codigo)}-${i + 1}`, texto: q.texto, tipo: q.tipo ?? 'ok_nok', unidad: q.unidad, min: q.min, max: q.max }))
         : [{ id: `${ids.plantilla(p.codigo)}-1`, texto: `Completar el formulario ${p.codigo}${p.proposito ? ` (${p.proposito})` : ''}. Sus preguntas aún no se han cargado desde SoftWrench.`, tipo: 'ok_nok' }],
     };
-    todasPlantillas.set(t.id, t);
-    if (!existentes.templateIds.has(t.id)) templates.push(t);
+    const guardada = existentes.templates?.get(t.id);
+    if (!existentes.templateIds.has(t.id)) {
+      templates.push(t);
+      todasPlantillas.set(t.id, t);
+    } else if (guardada && esPlantillaSinPreguntas(guardada) && preguntas.length) {
+      // Ahora llegan sus preguntas reales: nueva versión de la plantilla
+      const nueva = { ...t, version: guardada.version + 1 };
+      templatesActualizadas.push(nueva);
+      todasPlantillas.set(t.id, nueva);
+    } else {
+      todasPlantillas.set(t.id, guardada ?? t);
+    }
   }
 
   // Planes: inactivos (SoftWrench sigue generando las OTs durante el piloto)
@@ -203,6 +240,8 @@ export function construirImportacion(snap: SwSnapshot, existentes: Existentes, a
 
   // OTs abiertas y ejecutadas sin cerrar
   const ots: OT[] = [];
+  const otsActualizadas: OT[] = [];
+  const cambios: string[] = [];
   let otExistentes = 0;
   let cerradas = 0;
   const porEstado: Record<string, number> = {};
@@ -212,8 +251,19 @@ export function construirImportacion(snap: SwSnapshot, existentes: Existentes, a
       avisos.push(`OT ${w.wonum}: estado ${w.status} desconocido, no se importó.`);
       continue;
     }
+    if (existentes.otCodigos.has(w.wonum)) {
+      otExistentes++;
+      const actual = existentes.ots?.get(w.wonum);
+      const plan = w.pmnum ? snap.planes.find(p => p.pmnum === w.pmnum) : undefined;
+      const plantillasPlan = plan ? [...new Map(plan.plantillas.map(c => todasPlantillas.get(ids.plantilla(c))).filter((t): t is ChecklistTemplate => Boolean(t)).map(t => [t.id, t])).values()] : [];
+      const r = actual ? actualizarDesdeSw(actual, w, plantillasPlan, templatesActualizadas, importado) : null;
+      if (r) {
+        otsActualizadas.push(r.ot);
+        cambios.push(`${w.wonum}: ${r.cambios.join('; ')}`);
+      }
+      continue;
+    }
     if (estado === null) { cerradas++; continue; }
-    if (existentes.otCodigos.has(w.wonum)) { otExistentes++; continue; }
     porEstado[estado] = (porEstado[estado] ?? 0) + 1;
 
     const tipo = TIPO_DESDE_SW[w.worktype] ?? 'Correctiva';
@@ -287,12 +337,103 @@ export function construirImportacion(snap: SwSnapshot, existentes: Existentes, a
     templates,
     plans,
     ots,
+    templatesActualizadas,
+    otsActualizadas,
     resumen: {
       equipos: { nuevos: assets.filter(a => a.tipo !== 'Planta' && a.tipo !== 'Area').length, existentes: equiposExistentes },
-      plantillas: { nuevas: templates.length, existentes: snap.plantillas.length - templates.length, sinPreguntas },
+      plantillas: { nuevas: templates.length, existentes: snap.plantillas.length - templates.length, sinPreguntas, actualizadas: templatesActualizadas.length },
       planes: { nuevos: plans.length, existentes: snap.planes.length - plans.length - omitidos.length, omitidos },
-      ots: { nuevas: ots.length, existentes: otExistentes, omitidasCerradas: cerradas, porEstado },
+      ots: { nuevas: ots.length, existentes: otExistentes, actualizadas: otsActualizadas.length, omitidasCerradas: cerradas, porEstado },
+      cambios,
       avisos,
     },
   };
+}
+
+/**
+ * Aplica a una OT ya importada lo que cambió en SoftWrench. Reglas:
+ *  - Solo OTs que vinieron de SoftWrench (las creadas en ORBI no se tocan).
+ *  - El estado solo avanza: si en ORBI la OT va más adelante (el técnico ya la ejecutó aquí), se conserva.
+ *  - Fechas programadas: solo mientras la OT no se haya empezado.
+ *  - Técnico y HH: solo se completan si en ORBI están vacíos.
+ *  - Checklist: se reemplaza por las preguntas reales solo si el técnico aún no lo tocó.
+ */
+export function actualizarDesdeSw(
+  actual: OT, w: SwOT, plantillasPlan: ChecklistTemplate[], plantillasNuevas: ChecklistTemplate[], ahoraIso: string,
+): { ot: OT; cambios: string[] } | null {
+  if (!actual.softwrench) return null;
+  const cambios: string[] = [];
+  const ot: OT = { ...actual, softwrench: { ...actual.softwrench, estado: w.status, enlace: w.link ?? actual.softwrench.enlace } };
+  const historial = [...(actual.lifecycleHistory ?? [])];
+
+  // Estado
+  const destino = estadoDestino(w.status);
+  if (destino && (RANGO_SW[w.status] ?? 0) > rangoOrbi(actual.estado)) {
+    const ejecuta = (RANGO_SW[w.status] ?? 0) >= 4 && w.status !== 'CAN';
+    if (ejecuta && !historial.some(h => softwrenchCodeOf(h.estadoNuevo) === 'FDCOMP') && fecha(w.fechaTerreno)) {
+      historial.push({ estadoAnterior: actual.estado, estadoNuevo: 'Finalizada', fecha: w.fechaTerreno!, usuario: nombreDesdeCorreo(w.tecnicosConHoras?.[0]) || 'SoftWrench', comentario: 'Ejecutada en terreno (dato de SoftWrench)' });
+    }
+    if (destino !== 'Finalizada' || !historial.some(h => h.estadoNuevo === 'Finalizada')) {
+      historial.push({ estadoAnterior: historial.at(-1)?.estadoNuevo ?? actual.estado, estadoNuevo: destino, fecha: w.statusdate || ahoraIso, usuario: 'SoftWrench', comentario: `Actualizada desde SoftWrench (estado ${w.status})` });
+    }
+    ot.estado = destino;
+    ot.lifecycleHistory = historial;
+    if (ejecuta) {
+      ot.avance = 100;
+      // El checklist, las fotos y los PDF de esta ejecución quedaron en SoftWrench
+      ot.requiereChecklist = false;
+      ot.requiereEvidencia = false;
+    }
+    if (destino === 'Cerrada') ot.fechaCierre = fecha(w.statusdate) ?? ahoraIso.slice(0, 10);
+    if (destino === 'Bloqueada' && !ot.motivoEsperaCodigo) ot.motivoEsperaCodigo = 'OTRO';
+    cambios.push(`estado ${actual.estado} → ${destino}`);
+  } else if (destino && (RANGO_SW[w.status] ?? 0) < rangoOrbi(actual.estado)) {
+    cambios.push(`estado se mantiene en ${actual.estado} (en ORBI va más adelante que en SoftWrench: ${w.status})`);
+  }
+
+  // Fechas programadas (solo si aún no empieza)
+  const nuevaFecha = fecha(w.schedstart);
+  if (nuevaFecha && rangoOrbi(ot.estado) <= 2 && nuevaFecha !== actual.fechaInicio) {
+    ot.fechaInicio = nuevaFecha;
+    ot.fechaProgramada = nuevaFecha;
+    cambios.push(`reprogramada ${actual.fechaInicio || 'sin fecha'} → ${nuevaFecha}`);
+  }
+
+  // Técnico y HH (solo completar)
+  const tecnico = nombreDesdeCorreo(w.tecnicosConHoras?.[0]);
+  if (tecnico && !actual.responsable?.trim()) {
+    ot.responsable = tecnico;
+    ot.tecnicoAsignado = tecnico;
+    cambios.push(`técnico ${tecnico}`);
+  }
+  if ((w.horasTotales ?? 0) > (actual.hhReales ?? 0) && !(actual.laborLines && actual.laborLines.length)) {
+    ot.hhReales = w.horasTotales!;
+    cambios.push(`HH ${actual.hhReales ?? 0} → ${w.horasTotales}`);
+  }
+
+  // Cobrable (solo se agrega)
+  if (w.cobrable && !actual.cobrable) {
+    ot.cobrable = true;
+    ot.cobrableDetalle = { por: 'SoftWrench', fecha: ahoraIso };
+    cambios.push('marcada cobrable');
+  }
+
+  // Checklist con las preguntas reales recién cargadas
+  const tocaPlantillaNueva = plantillasPlan.some(t => plantillasNuevas.some(n => n.id === t.id));
+  if (tocaPlantillaNueva && rangoOrbi(ot.estado) <= 2 && checklistSinTocar(actual)) {
+    ot.checklistExecution = buildChecklistFromTemplates(plantillasPlan);
+    ot.requiereChecklist = plantillasPlan.length > 0;
+    cambios.push(`checklist con ${ot.checklistExecution.length} preguntas reales`);
+  }
+
+  const relevantes = cambios.filter(c => !c.startsWith('estado se mantiene'));
+  if (!relevantes.length && actual.softwrench.estado === w.status) {
+    return null;
+  }
+  if (!relevantes.length) {
+    // Solo cambió el estado en SoftWrench sin efecto en ORBI: se registra el dato de origen
+    return { ot, cambios: cambios.length ? cambios : [`estado en SoftWrench ${actual.softwrench.estado} → ${w.status}`] };
+  }
+  ot.historialCambios = [...(actual.historialCambios ?? []), { fecha: ahoraIso, usuario: 'Importación', accion: 'Actualización desde SoftWrench', detalle: relevantes.join('; ') }];
+  return { ot, cambios };
 }

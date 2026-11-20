@@ -32,7 +32,9 @@ export function importarSnapshot(db: Db, snap: SwSnapshot, opciones: { aplicar: 
   const assets = leer<Asset>(CMMS_KEYS.ASSETS);
   const templates = leer<ChecklistTemplate>(CMMS_KEYS.TEMPLATES);
   const plans = leer<PmPlan>(CMMS_KEYS.PLANS);
-  const otCodigos = new Set(repo.listOTs(db).map(s => s.ot.codigo));
+  const guardadas = repo.listOTs(db);
+  const otCodigos = new Set(guardadas.map(s => s.ot.codigo));
+  const porCodigo = new Map(guardadas.map(s => [s.ot.codigo, s]));
 
   const r = construirImportacion(snap, {
     assetIds: new Set(assets.data.map(a => a.id)),
@@ -40,6 +42,8 @@ export function importarSnapshot(db: Db, snap: SwSnapshot, opciones: { aplicar: 
     planIds: new Set(plans.data.map(p => p.id)),
     otCodigos,
     planIdPorCodigo: new Map(plans.data.map(p => [p.codigo.trim(), p.id])),
+    templates: new Map(templates.data.map(t => [t.id, t])),
+    ots: new Map(guardadas.map(s => [s.ot.codigo, s.ot])),
   }, opciones.ahora);
 
   // Las mismas validaciones que aplica la pantalla "Activos y Preventivos"
@@ -50,7 +54,12 @@ export function importarSnapshot(db: Db, snap: SwSnapshot, opciones: { aplicar: 
     const e = validateTemplate(t);
     if (e.length) throw new Error(`Plantilla ${t.codigo}: ${e.join(' ')}`);
   }
-  const todasPlantillas = [...templates.data, ...r.templates];
+  const actualizadasPorId = new Map(r.templatesActualizadas.map(t => [t.id, t]));
+  const todasPlantillas = [...templates.data.map(t => actualizadasPorId.get(t.id) ?? t), ...r.templates];
+  for (const t of r.templatesActualizadas) {
+    const e = validateTemplate(t);
+    if (e.length) throw new Error(`Plantilla ${t.codigo}: ${e.join(' ')}`);
+  }
   for (const p of r.plans) {
     const e = validatePlan(p, todasPlantillas, [...plans.data, ...r.plans]);
     if (e.length) throw new Error(`Plan ${p.codigo}: ${e.join(' ')}`);
@@ -59,9 +68,21 @@ export function importarSnapshot(db: Db, snap: SwSnapshot, opciones: { aplicar: 
   if (opciones.aplicar) {
     inTransaction(db, () => {
       if (r.assets.length && repo.saveCollection(db, CMMS_KEYS.ASSETS, todosAssets, assets.version, por) === null) throw new Error('Los equipos cambiaron durante la importación; vuelve a intentarlo.');
-      if (r.templates.length && repo.saveCollection(db, CMMS_KEYS.TEMPLATES, todasPlantillas, templates.version, por) === null) throw new Error('Las plantillas cambiaron durante la importación; vuelve a intentarlo.');
+      if ((r.templates.length || r.templatesActualizadas.length) && repo.saveCollection(db, CMMS_KEYS.TEMPLATES, todasPlantillas, templates.version, por) === null) throw new Error('Las plantillas cambiaron durante la importación; vuelve a intentarlo.');
       if (r.plans.length && repo.saveCollection(db, CMMS_KEYS.PLANS, [...plans.data, ...r.plans], plans.version, por) === null) throw new Error('Los planes cambiaron durante la importación; vuelve a intentarlo.');
       for (const ot of r.ots) repo.insertOT(db, ot, por);
+      // OTs ya importadas: nueva versión con los campos que cambiaron (los teléfonos la reciben al sincronizar)
+      for (const ot of r.otsActualizadas) {
+        const actual = porCodigo.get(ot.codigo)!;
+        const version = actual.version + 1;
+        const fieldVersions = { ...actual.fieldVersions };
+        for (const k of Object.keys(ot) as (keyof typeof ot)[]) {
+          if (JSON.stringify(ot[k]) !== JSON.stringify(actual.ot[k])) fieldVersions[k as string] = version;
+        }
+        if (!repo.saveOT(db, { ot, version, fieldVersions }, actual.version, por)) {
+          throw new Error(`La OT ${ot.codigo} cambió durante la importación; vuelve a intentarlo.`);
+        }
+      }
     });
   }
   return r;
