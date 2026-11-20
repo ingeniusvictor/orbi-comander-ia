@@ -368,3 +368,42 @@ test('17B: aprobación del correctivo y marca de cobrable con autor', async () =
   assert.equal(ot.aprobadaPor, 'Rodolfo Garcés');
   assert.ok(ot.fechaAprobacion);
 });
+
+test('17B: cola de cierre — firmas por etapa hechas con firmarEtapa y validadas por el servidor', async () => {
+  const { firmarEtapa, colaDeCierre } = await import('../src/domain/cierre');
+  const codigo = 'OT-E2E-CIERRE-01';
+  const nueva = {
+    codigo, plantaId: 'ORBI-PV-058', plantaNombre: 'Cantillana', activo: 'Cerco perimetral', tipo: 'Inspección', prioridad: 'Media', criticidad: 'Media',
+    responsable: 'Víctor León', supervisor: 'Mauricio Valdés', fechaInicio: '2027-10-01', fechaLimite: '2027-10-10', estado: 'Programada',
+    avance: 0, hhEstimadas: 2, hhReales: 0, observaciones: 'Inspección de cerco', origen: 'Supervisor Terreno', impacto: 'Bajo',
+    riesgoDisponibilidad: 'No aplica', requiereEvidencia: false, requiereChecklist: false, requiereAST: false,
+  } as unknown as OT;
+  assert.equal((await supervisor.send('/ots', 'POST', { ot: nueva })).status, 201);
+  let ot = ok(await tecnico.patch(await tecnico.ot(codigo), {}, { to: 'En ejecución' }), 'en ejecución');
+  ot = ok(await tecnico.patch(ot, { laborLines: [{ id: 'hh-c1', tecnico: 'Víctor León', fecha: '2027-10-02', horaInicio: '08:00', horaFin: '10:00', horas: 2 }] }), 'HH');
+  ot = ok(await tecnico.patch(ot, {}, { to: 'Finalizada' }), 'ejecutada');
+
+  const enCola = (ots: OT[]) => colaDeCierre(ots, '2027-10-05').find(f => f.ot.codigo === codigo);
+  assert.equal(enCola([ot])?.etapa, 'Supervisor');
+
+  const firmar = async (c: Client, rol: Parameters<typeof firmarEtapa>[1]['rol'], nombre: string) => {
+    const actual = await c.ot(codigo);
+    const r = firmarEtapa(actual, { usuario: nombre, rol });
+    if (r.ok === false) throw new Error(r.error);
+    const { approvals, historialCambios, comentarioSupervisor, comentarioCoordinador, comentarioJefeOM, fechaCierre } = r.ot;
+    return ok(await c.patch(actual, { approvals, historialCambios, comentarioSupervisor, comentarioCoordinador, comentarioJefeOM, fechaCierre },
+      { to: r.ot.estado }), `firma ${rol}`);
+  };
+  // El coordinador no puede saltarse al supervisor firmando como Jefe
+  assert.equal(firmarEtapa(await jefe.ot(codigo), { usuario: 'x', rol: 'SUPERVISOR_TERRENO' }).ok, true);
+  assert.equal(firmarEtapa({ ...(await jefe.ot(codigo)), estado: 'Pendiente aprobación Jefe O&M' }, { usuario: 'x', rol: 'COORDINADOR_OM' }).ok, false);
+
+  ot = await firmar(supervisor, 'SUPERVISOR_TERRENO', 'Mauricio Valdés');
+  assert.equal(ot.estado, 'En revisión Coordinador');
+  ot = await firmar(coordinador, 'COORDINADOR_OM', 'Rodolfo Garcés');
+  assert.equal(ot.estado, 'Pendiente aprobación Jefe O&M');
+  ot = await firmar(jefe, 'JEFE_OM', 'Felipe Soto');
+  assert.equal(ot.estado, 'Cerrada');
+  assert.deepEqual(ot.approvals!.map(a => `${a.rol}:${a.nombre}`), ['Supervisor:Mauricio Valdés', 'Coordinador:Rodolfo Garcés', 'JefeOM:Felipe Soto']);
+  assert.ok(ot.fechaCierre);
+});

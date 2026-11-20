@@ -52,6 +52,8 @@ import ReportCenter from './ReportCenter';
 import OTMaintenanceFields from './OTMaintenanceFields';
 import BandejaAprobacion from './BandejaAprobacion';
 import TableroPlazos from './TableroPlazos';
+import ColaCierre from './ColaCierre';
+import { colaDeCierre } from '../domain/cierre';
 import { esperaAprobacion, ROLES_COBRO } from '../domain/aprobacion';
 
 interface OTManagerProps {
@@ -337,7 +339,7 @@ export default function OTManager({
   
   const [editingOt, setEditingOt] = useState<OT | null>(null);
   const [activeTab, setActiveTab] = useState<number>(0);
-  const [activeSubView, setActiveSubView] = useState<'ots' | 'aprobar' | 'plazos' | 'vault' | 'sharepoint' | 'ptw' | 'inventory' | 'scheduler' | 'reports'>('ots');
+  const [activeSubView, setActiveSubView] = useState<'ots' | 'aprobar' | 'cierre' | 'plazos' | 'vault' | 'sharepoint' | 'ptw' | 'inventory' | 'scheduler' | 'reports'>('ots');
   
   // States for Wizard
   const [isCreatingWizard, setIsCreatingWizard] = useState<boolean>(false);
@@ -1130,6 +1132,7 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
         {([
           { id: 'ots', label: 'Órdenes de trabajo', icon: ClipboardList, show: true },
           { id: 'aprobar', label: `Por aprobar (${ots.filter(esperaAprobacion).length})`, icon: CheckSquare, show: !isTechnician },
+          { id: 'cierre', label: `Cola de cierre (${colaDeCierre(ots, new Date().toISOString().slice(0, 10)).length})`, icon: ShieldCheck, show: !isTechnician },
           { id: 'plazos', label: 'Plazos', icon: Clock, show: !isTechnician },
           { id: 'scheduler', label: isTechnician ? 'Mi agenda' : 'Programación', icon: Calendar, show: true },
           { id: 'vault', label: 'Evidencias', icon: Camera, show: true },
@@ -1205,6 +1208,8 @@ Exportación documental avanzada podrá integrarse en una fase futura con ORBI D
           activeUserName={activeUserName}
           onAddAuditLog={onAddAuditLog}
         />
+      ) : activeSubView === 'cierre' ? (
+        <ColaCierre ots={ots} userRole={userRole} activeUserName={activeUserName} escalaciones={escalaciones} onUpdate={onUpdate} />
       ) : activeSubView === 'plazos' ? (
         <TableroPlazos ots={ots} plantas={plantas} />
       ) : activeSubView === 'aprobar' ? (

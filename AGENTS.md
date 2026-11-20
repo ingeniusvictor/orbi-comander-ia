@@ -532,6 +532,10 @@ Before approving any subsequent build or turn, verify the following 12 test path
   - Dominio `src/domain/plazos.ts`: estado del plazo (a tiempo, por vencer a 3 días, vencida, ejecutada a tiempo o con atraso). La ejecución se mide con el primer paso a ejecutada/en revisión/cerrada, no con el cierre administrativo. Sin fecha objetivo se usa la fecha límite.
   - Pestaña "Plazos" en OT Center (`src/components/TableroPlazos.tsx`): vencidas, por vencer, cumplimiento a tiempo y activas, por planta o por cliente (cliente desde la matriz de plantas), listas de vencidas y por vencer. La ficha de la OT muestra su plazo.
   - Pruebas: `tests/plazos.test.ts` y paso 11 de `tests/e2e/piloto.spec.ts`.
+- **Punto 4 HECHO — cola de cierre con plazos y firma múltiple:**
+  - Dominio `src/domain/cierre.ts`: `colaDeCierre` (ejecutadas sin cerrar, días desde la ejecución en terreno, firma pendiente y bloqueos de cierre), `firmarEtapa` (Supervisor → Coordinador → Jefe O&M; usa `transitionOT` y agrega la aprobación), `META_CIERRE_DIAS` = 3.
+  - Pestaña "Cola de cierre (n)" en OT Center (`src/components/ColaCierre.tsx`): días sin cerrar (ámbar sobre 3, rojo sobre 6), filtro por etapa, "Seleccionar todas las que puedo firmar" y firma de varias OTs a la vez; la firma de cierre solo se ofrece si la OT no tiene bloqueos. Cada OT se envía por separado y el servidor revalida firma y transición.
+  - Pruebas: 2 unitarias en `tests/seguimiento.test.ts`, 1 de API (cadena completa con `firmarEtapa`) y paso 12 de `tests/e2e/piloto.spec.ts`.
 - **Regla nueva para agentes:** no reintroducir datos de demo que se escriban solos al abrir un módulo, ni valores inventados para firmas, aprobaciones o evidencias.
 
 ## 6. DEVELOPMENT RULES (FOR ALL AGENTS)

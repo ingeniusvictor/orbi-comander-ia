@@ -252,3 +252,28 @@ test('11. el Jefe O&M revisa el tablero de plazos (17B)', async ({ browser }) =>
   expect(pm.fechaObjetivoLimite).toBeTruthy();
   await ctx.close();
 });
+
+test('12. el Jefe O&M firma varias OTs a la vez desde la cola de cierre (17B)', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-CL' });
+  const jefe = await ctx.newPage();
+  await login(jefe, E2E_USERS.jefe);
+  await expect(jefe.getByRole('button', { name: 'ORBI OT Center' })).toBeVisible();
+  const antes = ((await (await jefe.request.get('/api/ots', { headers: { 'X-ORBI-Request': '1' } })).json()).ots as any[]);
+  const enCola = (ots: any[]) => ots.filter(o => ['Finalizada', 'Lista para revisión', 'En revisión Supervisor', 'En revisión Coordinador', 'Pendiente aprobación Jefe O&M', 'En revisión'].includes(o.estado));
+  expect(enCola(antes).length).toBeGreaterThan(0);
+
+  await jefe.getByRole('button', { name: 'ORBI OT Center' }).click();
+  await jefe.getByRole('tab', { name: /Cola de cierre/ }).click();
+  await expect(jefe.getByText('Ejecutadas sin cerrar')).toBeVisible();
+  await jefe.getByLabel(/Seleccionar todas las que puedo firmar/).check();
+  await shot(jefe, '10-cola-cierre');
+  await jefe.getByRole('button', { name: /Firmar \d+ seleccionada/ }).click();
+  await expect(jefe.getByText(/Se firmaron \d+ OT/)).toBeVisible();
+
+  // Cada OT firmada avanzó una etapa en el servidor, con el usuario real
+  await expect.poll(async () => {
+    const ots = (await (await jefe.request.get('/api/ots', { headers: { 'X-ORBI-Request': '1' } })).json()).ots as any[];
+    return ots.some(o => o.approvals?.some((a: any) => a.nombre === 'Jefe Prueba'));
+  }, { timeout: 15_000 }).toBe(true);
+  await ctx.close();
+});
